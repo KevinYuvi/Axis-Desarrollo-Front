@@ -1,5 +1,5 @@
-import WelcomeScreen from './src/modules/home/presentation/screens/WelcomeScreen';
+import { LoginScreen } from './src/modules/auth';
 
 export default function App() {
-  return <WelcomeScreen />;
+  return <LoginScreen />;
 }
