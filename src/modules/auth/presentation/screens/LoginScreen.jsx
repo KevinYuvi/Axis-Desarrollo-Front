@@ -17,12 +17,20 @@ import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
 
-export default function LoginScreen() {
+export default function LoginScreen({ onDemoAccess }) {
   const [correo, setCorreo] = useState('');
   const [password, setPassword] = useState('');
 
   const handleLogin = () => {
     Alert.alert('Inicio de sesión simulado');
+  };
+
+  const handleDemoAccess = () => {
+    if (onDemoAccess) {
+      onDemoAccess();
+    } else {
+      Alert.alert('Acceso demo como estudiante');
+    }
   };
 
   return (
@@ -75,6 +83,12 @@ export default function LoginScreen() {
             <View style={styles.buttonContainer}>
               <Button title="Iniciar sesión" onPress={handleLogin} />
               <Text style={styles.helpText}>Usa tu correo institucional UCE</Text>
+              <View style={{ height: spacing.sm }} />
+              <Button
+                title="Ingresar como estudiante demo"
+                variant="secondary"
+                onPress={handleDemoAccess}
+              />
             </View>
           </View>
         </ScrollView>
