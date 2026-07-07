@@ -15,57 +15,74 @@ export default function DashboardLayout() {
     );
   }
 
-  // Obtenemos el rol directamente de los metadatos de Clerk
-  // Si no tiene rol asignado, lo tratamos como estudiante por defecto
-  const userRole = user?.publicMetadata?.rol || 'estudiante';
-  const isAdmin = userRole === 'admin';
+  // Extraemos el rol. Por defecto, si alguien se registra, es estudiante.
+  const rol = user?.publicMetadata?.rol?.toLowerCase() || 'estudiante';
+
+  // Lógica booleana para mostrar/ocultar
+  const isAdmin = rol === 'admin';
+  const isDocente = rol === 'docente';
+  const isEstudiante = rol === 'estudiante';
 
   return (
     <Tabs
       screenOptions={{
         headerShown: true,
-        tabBarActiveTintColor: '#3B82F6', // Azul UCE
+        headerTintColor: '#111827',
+        tabBarActiveTintColor: '#3B82F6', // Azul institucional UCE
         tabBarInactiveTintColor: '#9CA3AF',
         tabBarStyle: {
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
           borderTopColor: '#F3F4F6',
-          elevation: 0, // Quita la sombra en Android para un diseño más plano
+          elevation: 0,
         },
       }}
     >
-      {/* Pestaña 1: El Macro-Mapa (Fase 3) */}
+      {/* 1. CAMPUS / MAPA: Visible absolutamente para todos */}
       <Tabs.Screen
         name="index"
         options={{
           title: 'Campus',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="map-outline" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => <Ionicons name="map-outline" size={size} color={color} />,
         }}
       />
 
-      {/* Pestaña 2: Motor de Reservas (Fase 5) */}
+      {/* 2. RESERVAS: Estudiantes y Docentes */}
       <Tabs.Screen
         name="reservas"
         options={{
           title: 'Mis Reservas',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar-outline" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
+          href: (isEstudiante || isDocente) ? '/(dashboard)/reservas' : null,
         }}
       />
 
-      {/* Pestaña 3: SOLO PARA ADMINISTRADORES */}
+      {/* 3. REPORTES / INCIDENCIAS: Docentes y Admins */}
+      <Tabs.Screen
+        name="reportes"
+        options={{
+          title: 'Incidencias',
+          tabBarIcon: ({ color, size }) => <Ionicons name="warning-outline" size={size} color={color} />,
+          href: (isDocente || isAdmin) ? '/(dashboard)/reportes' : null,
+        }}
+      />
+
+      {/* 4. GESTIÓN: Solo Administradores */}
       <Tabs.Screen
         name="admin"
         options={{
           title: 'Gestión',
-          // Esta es la magia: Oculta el botón de la barra si no es admin
-          href: isAdmin ? '/(dashboard)/admin' : null, 
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => <Ionicons name="briefcase-outline" size={size} color={color} />,
+          href: isAdmin ? '/(dashboard)/admin' : null,
+        }}
+      />
+
+      {/* 5. PERFIL: Todos los usuarios */}
+      <Tabs.Screen
+        name="perfil"
+        options={{
+          title: 'Perfil',
+          tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
         }}
       />
     </Tabs>
