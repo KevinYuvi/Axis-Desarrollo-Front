@@ -8,8 +8,8 @@ import {
   Platform,
   Alert,
   StyleSheet,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import Input from '../../../../shared/components/Input';
 import Button from '../../../../shared/components/Button';
