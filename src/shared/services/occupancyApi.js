@@ -5,10 +5,6 @@ import { API_BASE_URL } from '../config/api';
 // este timeout solo cubre latencia de red normal en la misma WiFi.
 const DEFAULT_TIMEOUT_MS = 8000;
 
-// El análisis con visión IA puede tardar más que una consulta normal porque
-// implica una inferencia real de YOLO (y, en frío, carga del modelo).
-const ANALYZE_TIMEOUT_MS = 20000;
-
 const client = axios.create({
   baseURL: API_BASE_URL,
   timeout: DEFAULT_TIMEOUT_MS,
@@ -39,17 +35,5 @@ export async function getOccupancyBySpace(spaceId) {
  */
 export async function getOccupancyRecommendation() {
   const { data } = await client.get('/occupancy/recommendation');
-  return data;
-}
-
-/**
- * Solicita al backend analizar un espacio mediante el vision-service (Fase 2)
- * @param {string} spaceId - Identificador único del espacio a analizar
- * @returns {Promise<Object>} Promesa que resuelve con los datos actualizados del espacio
- */
-export async function analyzeOccupancyByVision(spaceId) {
-  const { data } = await client.post(`/occupancy/spaces/${spaceId}/analyze`, undefined, {
-    timeout: ANALYZE_TIMEOUT_MS,
-  });
   return data;
 }

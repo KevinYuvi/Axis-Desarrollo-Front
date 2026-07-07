@@ -17,7 +17,7 @@ const FILTERS = ['Todas', 'Bibliotecas', 'Salas', 'Computadoras'];
 export default function LibrariesScreen({ onNavigate }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('Todas');
-  const { loading, isFallback, spaces, analyzingId, analyzeSpace } = useOccupancy();
+  const { loading, isFallback, spaces } = useOccupancy();
 
   const filteredLibraries = useMemo(() => {
     return spaces.filter(space => {
@@ -52,16 +52,6 @@ export default function LibrariesScreen({ onNavigate }) {
       : [`${space.type} · ${space.distanceTime}`, `${space.occupancy}% ocupación`];
 
     Alert.alert(space.name, detailLines.filter(Boolean).join('\n'));
-  };
-
-  /**
-   * Solicita la actualización de un espacio mediante visión IA y muestra el
-   * resultado (éxito, fallback o error controlado) sin romper la pantalla
-   * @param {string} spaceId - Identificador del espacio a analizar
-   */
-  const handleAnalyzeVision = async (spaceId) => {
-    const result = await analyzeSpace(spaceId);
-    Alert.alert('Axis', result.message);
   };
 
   return (
@@ -110,8 +100,6 @@ export default function LibrariesScreen({ onNavigate }) {
                 key={space.id}
                 space={space}
                 onPressDetail={handleSpaceDetail}
-                onAnalyzeVision={handleAnalyzeVision}
-                analyzing={analyzingId === space.id}
               />
             ))
           ) : (
