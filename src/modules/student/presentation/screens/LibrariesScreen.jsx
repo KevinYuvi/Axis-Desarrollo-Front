@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { Feather } from '@expo/vector-icons';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
@@ -8,16 +9,17 @@ import AppHeader from '../../../../shared/components/AppHeader';
 import SearchInput from '../../../../shared/components/SearchInput';
 import BottomTabBar from '../../../../shared/components/BottomTabBar';
 import SpaceListCard from '../../../../shared/components/SpaceListCard';
-import { librariesMock } from '../../../../shared/mocks/spacesMock';
+import { useOccupancy } from '../../../../shared/hooks/useOccupancy';
 
 const FILTERS = ['Todas', 'Bibliotecas', 'Salas', 'Computadoras'];
 
 export default function LibrariesScreen({ onNavigate }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('Todas');
+  const { loading, isFallback, spaces } = useOccupancy();
 
   const filteredLibraries = useMemo(() => {
-    return librariesMock.filter(space => {
+    return spaces.filter(space => {
       // Filter by search
       const matchesSearch = space.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             space.type.toLowerCase().includes(searchQuery.toLowerCase());
@@ -34,10 +36,21 @@ export default function LibrariesScreen({ onNavigate }) {
 
       return matchesSearch && matchesFilter;
     });
-  }, [searchQuery, activeFilter]);
+  }, [searchQuery, activeFilter, spaces]);
 
   const handleSpaceDetail = (space) => {
-    Alert.alert('Aquí se mostrará el detalle del espacio seleccionado');
+    const raw = space.raw;
+    const detailLines = raw
+      ? [
+          `${raw.building} · ${raw.floor}`,
+          `Puestos: ${raw.freeSeats} libres de ${raw.totalSeats}`,
+          `Computadoras: ${raw.computersAvailable} de ${raw.computersTotal}`,
+          `Salas de estudio: ${raw.studyRoomsAvailable} de ${raw.studyRoomsTotal}`,
+          raw.recommendationReason,
+        ]
+      : [`${space.type} · ${space.distanceTime}`, `${space.occupancy}% ocupación`];
+
+    Alert.alert(space.name, detailLines.filter(Boolean).join('\n'));
   };
 
   return (
@@ -50,7 +63,14 @@ export default function LibrariesScreen({ onNavigate }) {
         <Text style={styles.title}>Bibliotecas y salas</Text>
         <Text style={styles.subtitle}>Consulta espacios disponibles en la UCE</Text>
 
-        <SearchInput 
+        {isFallback && (
+          <View style={styles.fallbackNotice}>
+            <Feather name="wifi-off" size={12} color={colors.textSecondary} style={{ marginRight: 6 }} />
+            <Text style={styles.fallbackText}>Mostrando datos simulados</Text>
+          </View>
+        )}
+
+        <SearchInput
           value={searchQuery}
           onChangeText={setSearchQuery}
           placeholder="Buscar biblioteca, sala o computadora..."
@@ -71,12 +91,14 @@ export default function LibrariesScreen({ onNavigate }) {
         </ScrollView>
 
         <View style={styles.listContainer}>
-          {filteredLibraries.length > 0 ? (
+          {loading ? (
+            <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.xl }} />
+          ) : filteredLibraries.length > 0 ? (
             filteredLibraries.map(space => (
-              <SpaceListCard 
-                key={space.id} 
-                space={space} 
-                onPressDetail={handleSpaceDetail} 
+              <SpaceListCard
+                key={space.id}
+                space={space}
+                onPressDetail={handleSpaceDetail}
               />
             ))
           ) : (
@@ -112,6 +134,22 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.xs,
     marginBottom: spacing.lg,
+  },
+  fallbackNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    marginBottom: spacing.md,
+  },
+  fallbackText: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
   },
   filtersContainer: {
     marginBottom: spacing.lg,
