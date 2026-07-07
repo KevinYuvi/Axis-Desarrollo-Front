@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { OccupancyProvider } from './src/shared/context/OccupancyContext';
 import { LoginScreen } from './src/modules/auth';
 import { StudentHomeScreen, LibrariesScreen } from './src/modules/student';
 import { AssistantScreen } from './src/modules/assistant';
@@ -25,7 +26,9 @@ function AppContent() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <AppContent />
+      <OccupancyProvider>
+        <AppContent />
+      </OccupancyProvider>
     </SafeAreaProvider>
   );
 }

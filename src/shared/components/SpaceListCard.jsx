@@ -1,15 +1,18 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import { spacing, radius } from '../theme/spacing';
 import Button from './Button';
 
-export default function SpaceListCard({ space, onPressDetail }) {
+export default function SpaceListCard({ space, onPressDetail, onAnalyzeVision, analyzing }) {
   let statusColor = colors.primary;
   if (space.status === 'Disponible') statusColor = colors.available;
   else if (space.status === 'Próximo') statusColor = colors.warning;
   else if (space.status === 'Ocupado') statusColor = colors.critical;
+
+  const isVisionSource = space.raw?.source === 'vision-service';
 
   return (
     <View style={styles.card}>
@@ -19,7 +22,12 @@ export default function SpaceListCard({ space, onPressDetail }) {
           <Text style={[styles.badgeText, { color: statusColor }]}>{space.status}</Text>
         </View>
       </View>
-      
+
+      <View style={styles.sourceBadge}>
+        <Feather name={isVisionSource ? 'eye' : 'cpu'} size={11} color={colors.textSecondary} style={{ marginRight: 4 }} />
+        <Text style={styles.sourceBadgeText}>Fuente: {isVisionSource ? 'Visión IA' : 'Simulado'}</Text>
+      </View>
+
       <Text style={styles.subtitle}>{space.type} · {space.distanceTime}</Text>
 
       <View style={styles.statsRow}>
@@ -44,6 +52,23 @@ export default function SpaceListCard({ space, onPressDetail }) {
       <View style={styles.buttonContainer}>
         <Button title="Ver detalle" onPress={() => onPressDetail(space)} />
       </View>
+
+      {onAnalyzeVision && (
+        <TouchableOpacity
+          style={[styles.visionButton, analyzing && styles.visionButtonDisabled]}
+          onPress={() => onAnalyzeVision(space.id)}
+          disabled={analyzing}
+        >
+          {analyzing ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <>
+              <Feather name="camera" size={14} color={colors.primary} style={{ marginRight: 6 }} />
+              <Text style={styles.visionButtonText}>Actualizar con visión IA</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -67,6 +92,35 @@ const styles = StyleSheet.create({
     fontSize: typography.size.md,
     fontWeight: typography.weight.bold,
     color: colors.textPrimary,
+  },
+  sourceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginBottom: spacing.sm,
+  },
+  sourceBadgeText: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+  },
+  visionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  visionButtonDisabled: {
+    opacity: 0.6,
+  },
+  visionButtonText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.primary,
   },
   badge: {
     paddingHorizontal: spacing.sm,
