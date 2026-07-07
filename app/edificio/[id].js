@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function EdificioDetalleScreen() {
-  const { id } = useLocalSearchParams(); // Captura si es "fac_ingenieria", "bib_central", etc.
+  const { id } = useLocalSearchParams();
   const router = useRouter();
 
   return (
@@ -22,8 +22,8 @@ export default function EdificioDetalleScreen() {
       <View style={styles.svgContainer}>
         <Ionicons name="map" size={60} color="#D1D5DB" />
         <Text style={styles.svgPlaceholderText}>
-          Aquí inyectaremos el componente PlanoSVG{'\n'}
-          correspondiente a: {id}
+          Aquí inyectaremos el componente PlanoSVG{"\n"}
+          correspondiente a: <Text style={{fontWeight: 'bold'}}>{id}</Text>
         </Text>
       </View>
 

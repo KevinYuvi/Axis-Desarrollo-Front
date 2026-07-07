@@ -8,7 +8,7 @@ import { useUser } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 
 // 🔴 IMPORTANTE: PEGA TU CLAVE DE API AQUÍ PARA QUE FUNCIONE LA RUTA
-const GOOGLE_MAPS_APIKEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_APIKEY;
+const GOOGLE_MAPS_APIKEY = 'TU_API_KEY_AQUI'; 
 
 const FACULTADES_REGION = {
   general: { latitude: -0.1995, longitude: -78.5028, latitudeDelta: 0.007, longitudeDelta: 0.007 },
