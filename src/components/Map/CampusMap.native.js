@@ -5,9 +5,8 @@ import MapViewDirections from 'react-native-maps-directions';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'; // Volvemos al enrutador manual
 
-// 🔴 IMPORTANTE: PEGA TU CLAVE DE API AQUÍ PARA QUE FUNCIONE LA RUTA
 const GOOGLE_MAPS_APIKEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_APIKEY;
 
 const FACULTADES_REGION = {
@@ -31,38 +30,28 @@ const EDIFICIOS_UCE = [
     coordinate: { latitude: -0.2011, longitude: -78.5035 },
   }
 ];
+
 const cleanMapStyle = [
-  {
-    "featureType": "poi",
-    "stylers": [{ "visibility": "off" }]
-  },
-  {
-    "featureType": "transit",
-    "stylers": [{ "visibility": "off" }]
-  }
+  { "featureType": "poi", "stylers": [{ "visibility": "off" }] },
+  { "featureType": "transit", "stylers": [{ "visibility": "off" }] }
 ];
 
 export default function CampusMap() {
   const mapRef = useRef(null);
-  const router = useRouter(); // Enrutador para saltar al SVG
+  const router = useRouter(); // Instanciamos el router
   const { user, isLoaded } = useUser();
   
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('Todos');
   
-  // Estados para la ruta GPS
   const [userLocation, setUserLocation] = useState(null);
   const [routeDestination, setRouteDestination] = useState(null);
 
-  // Pedir permisos de GPS al iniciar
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permiso denegado', 'Necesitamos tu ubicación para trazar la ruta.');
-        return;
-      }
+      if (status !== 'granted') return;
       let location = await Location.getCurrentPositionAsync({});
       setUserLocation({
         latitude: location.coords.latitude,
@@ -71,7 +60,6 @@ export default function CampusMap() {
     })();
   }, []);
 
-  // Centrado por Facultad
   useEffect(() => {
     if (isLoaded && user && mapRef.current && !routeDestination) {
       const userFacultad = user.publicMetadata?.facultad?.toLowerCase() || 'general';
@@ -96,6 +84,32 @@ export default function CampusMap() {
     setRouteDestination(selectedBuilding.coordinate);
   };
 
+  // =====================================================================
+  // FUNCIÓN DE DEPURACIÓN (LOGS ACTIVADOS)
+  // =====================================================================
+  const intentarNavegar = () => {
+    console.log("\n==============================================");
+    console.log("🔴 1. SE PRESIONÓ EL BOTÓN INFO DE AULAS");
+    
+    if (!selectedBuilding) {
+      console.log("❌ ERROR: selectedBuilding es NULL o UNDEFINED");
+      return;
+    }
+    
+    console.log("🟢 2. ID DEL EDIFICIO CAPTURADO:", selectedBuilding.id);
+    const rutaDestino = `/edificio/${selectedBuilding.id}`;
+    console.log("🔵 3. RUTA GENERADA EXACTA:", rutaDestino);
+
+    try {
+      console.log("⏳ 4. EJECUTANDO router.push()...");
+      router.push(rutaDestino);
+      console.log("✅ 5. COMANDO DE NAVEGACIÓN ENVIADO CON ÉXITO");
+    } catch (error) {
+      console.log("💥 ERROR CRÍTICO AL NAVEGAR:", error);
+    }
+    console.log("==============================================\n");
+  };
+
   const FilterChip = ({ label }) => {
     const isActive = activeFilter === label;
     return (
@@ -115,12 +129,11 @@ export default function CampusMap() {
         provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={FACULTADES_REGION.general}
+        customMapStyle={cleanMapStyle}
         showsUserLocation={true}
-        customMapStyle={cleanMapStyle} 
         showsMyLocationButton={false}
         onPress={() => { setSelectedBuilding(null); setRouteDestination(null); }}
       >
-        {/* Generador de la Ruta Azul */}
         {routeDestination && userLocation && (
           <MapViewDirections
             origin={userLocation}
@@ -129,7 +142,6 @@ export default function CampusMap() {
             strokeWidth={4}
             strokeColor="#3B82F6"
             onReady={result => {
-              // Centra la cámara para que se vea toda la ruta y el Bottom Sheet no tape el pin
               mapRef.current.fitToCoordinates(result.coordinates, {
                 edgePadding: { right: 50, bottom: 350, left: 50, top: 150 },
               });
@@ -137,34 +149,27 @@ export default function CampusMap() {
           />
         )}
 
-        {/* Pines con etiquetas personalizadas siempre visibles */}
         {edificiosFiltrados.map((edificio) => (
           <Marker
             key={edificio.id}
             coordinate={edificio.coordinate}
+            title={edificio.title}
+            description={edificio.description}
+            pinColor={selectedBuilding?.id === edificio.id ? 'red' : 'blue'}
             onPress={(e) => {
               e.stopPropagation();
               setSelectedBuilding(edificio);
-              setRouteDestination(null); // Resetea la ruta si tocas otro edificio
+              setRouteDestination(null);
               mapRef.current.animateToRegion({
                 ...edificio.coordinate,
-                latitude: edificio.coordinate.latitude - 0.0005, // Compensa el Bottom Sheet
+                latitude: edificio.coordinate.latitude - 0.0005,
                 latitudeDelta: 0.002, longitudeDelta: 0.002,
               }, 500);
             }}
-          >
-            <View style={styles.customMarkerContainer}>
-              <View style={styles.markerLabel}>
-                <Text style={styles.markerTitle}>{edificio.title}</Text>
-                <Text style={styles.markerSubtitle}>{edificio.description}</Text>
-              </View>
-              <Ionicons name="location" size={36} color={selectedBuilding?.id === edificio.id ? "#EF4444" : "#3B82F6"} />
-            </View>
-          </Marker>
+          />
         ))}
       </MapView>
 
-      {/* UI SUPERIOR: Buscador y Filtros */}
       <View style={styles.topUIContainer}>
         <View style={styles.searchBox}>
           <Ionicons name="search-outline" size={20} color="#9CA3AF" />
@@ -182,7 +187,6 @@ export default function CampusMap() {
         </ScrollView>
       </View>
 
-      {/* FASE 3: BOTTOM SHEET CON BOTONES DIVIDIDOS */}
       {selectedBuilding && (
         <View style={styles.bottomSheet}>
           <View style={styles.cardHeader}>
@@ -196,16 +200,16 @@ export default function CampusMap() {
           </View>
 
           <View style={styles.buttonRow}>
-            {/* Botón de Ruta (Secundario) */}
             <TouchableOpacity style={styles.secondaryButton} onPress={trazarRuta}>
               <Ionicons name="navigate-outline" size={18} color="#3B82F6" />
-              <Text style={styles.secondaryButtonText}>Ruta para llegar</Text>
+              <Text style={styles.secondaryButtonText}>Ruta</Text>
             </TouchableOpacity>
 
-            {/* Botón de Información (Principal - Llama a la Fase 4) */}
+            {/* BOTÓN CON LA FUNCIÓN DE LOGS CONECTADA */}
             <TouchableOpacity 
               style={styles.primaryButton} 
-              onPress={() => router.push(`/edificio/${selectedBuilding.id}`)}
+              activeOpacity={0.7} 
+              onPress={intentarNavegar}
             >
               <Ionicons name="layers-outline" size={18} color="#FFFFFF" />
               <Text style={styles.primaryButtonText}>Info de aulas</Text>
@@ -221,19 +225,6 @@ const styles = StyleSheet.create({
   container: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', alignItems: 'center' },
   map: { ...StyleSheet.absoluteFillObject },
   
-  /* ESTILOS DEL MARCADOR PERSONALIZADO */
-  customMarkerContainer: { alignItems: 'center', justifyContent: 'center' },
-  markerLabel: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    paddingHorizontal: 8, paddingVertical: 4,
-    borderRadius: 8, marginBottom: 2,
-    alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3,
-  },
-  markerTitle: { fontSize: 11, fontWeight: 'bold', color: '#111827' },
-  markerSubtitle: { fontSize: 9, color: '#6B7280' },
-
-  /* ESTILOS UI SUPERIOR */
   topUIContainer: { position: 'absolute', top: Platform.OS === 'ios' ? 50 : 30, width: '100%', paddingHorizontal: 16 },
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, paddingHorizontal: 16, height: 50, elevation: 5 },
   searchInput: { flex: 1, marginLeft: 10, fontSize: 15, color: '#111827' },
@@ -243,8 +234,7 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
   chipTextActive: { color: '#1D4ED8' },
 
-  /* ESTILOS BOTTOM SHEET */
-  bottomSheet: { position: 'absolute', bottom: 24, backgroundColor: '#FFFFFF', width: '92%', padding: 18, borderRadius: 16, elevation: 10 },
+  bottomSheet: { position: 'absolute', bottom: 24, backgroundColor: '#FFFFFF', width: '92%', padding: 18, borderRadius: 16, elevation: 10, zIndex: 100 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   iconBox: { backgroundColor: '#EFF6FF', padding: 12, borderRadius: 12, marginRight: 12 },
   textContainer: { flex: 1 },
