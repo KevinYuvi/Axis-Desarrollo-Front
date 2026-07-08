@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { WebView } from 'react-native-webview';
@@ -10,6 +10,7 @@ import { spacing, radius } from '../../../../shared/theme/spacing';
 import AppHeader from '../../../../shared/components/AppHeader';
 import Card from '../../../../shared/components/Card';
 import { useOccupancy } from '../../../../shared/hooks/useOccupancy';
+import { API_BASE_URL } from '../../../../shared/config/api';
 import { CAMERA_STREAM_URL, hasLiveCamera } from '../../../../shared/config/camera';
 import { getVisitRecommendation } from '../utils/visitRecommendation';
 
@@ -34,6 +35,19 @@ function getStatusColor(status) {
 }
 
 /**
+ * Construye la URL de la última foto analizada con las cajas de detección
+ * dibujadas. Se le agrega updatedAt como parámetro para forzar que la
+ * imagen se vuelva a descargar cada vez que el backend calculó un análisis
+ * nuevo, en vez de mostrar siempre la copia cacheada por el celular.
+ * @param {string} spaceId - Id del espacio con cámara real
+ * @param {string} updatedAt - Fecha/hora del último análisis (space.raw.updatedAt)
+ * @returns {string} URL lista para usar como source de un <Image>
+ */
+function getAnnotatedFrameUrl(spaceId, updatedAt) {
+  return `${API_BASE_URL}/occupancy/spaces/${spaceId}/frame?t=${encodeURIComponent(updatedAt)}`;
+}
+
+/**
  * Pantalla de cámara en vivo: muestra el stream MJPEG real de la cámara IP
  * (cuando el espacio la tiene conectada) junto con el estado de ocupación y
  * la recomendación de visita, reutilizando los datos ya cargados por
@@ -47,6 +61,11 @@ export default function CameraTrackingScreen({ spaceId, onNavigate }) {
   const space = spaces.find((item) => item.id === spaceId);
   const isLive = hasLiveCamera(spaceId);
   const recommendation = space ? getVisitRecommendation(space.status) : null;
+
+  const annotatedFrameUrl =
+    isLive && space?.raw?.updatedAt ? getAnnotatedFrameUrl(spaceId, space.raw.updatedAt) : null;
+  const [failedFrameUrl, setFailedFrameUrl] = useState(null);
+  const frameFailed = failedFrameUrl === annotatedFrameUrl;
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -81,6 +100,33 @@ export default function CameraTrackingScreen({ spaceId, onNavigate }) {
             <Text style={styles.noCameraText}>
               Esta biblioteca todavía no tiene una cámara conectada. Mostrando el último dato de ocupación disponible.
             </Text>
+          </Card>
+        )}
+
+        {isLive && (
+          <Card style={styles.cameraCard}>
+            <Text style={styles.frameSectionTitle}>Último análisis con IA (cada 30 s)</Text>
+            {annotatedFrameUrl && !frameFailed ? (
+              <>
+                <Image
+                  key={annotatedFrameUrl}
+                  source={{ uri: annotatedFrameUrl }}
+                  style={styles.cameraView}
+                  resizeMode="cover"
+                  onError={() => setFailedFrameUrl(annotatedFrameUrl)}
+                />
+                <Text style={styles.frameHelpText}>
+                  Los recuadros verdes marcan a cada persona que la IA detectó en esta foto. Si el número de
+                  personas no cambia después de varios ciclos, revisa que la cámara siga capturando (pantalla del
+                  celular encendida, sin bloqueo).
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.noCameraText}>
+                Todavía no hay un análisis con IA disponible para esta cámara (puede tardar hasta 30 segundos desde
+                que se enciende el vision-service).
+              </Text>
+            )}
           </Card>
         )}
 
@@ -180,6 +226,17 @@ const styles = StyleSheet.create({
   noCameraText: {
     fontSize: typography.size.sm,
     color: colors.textSecondary,
+  },
+  frameSectionTitle: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+  },
+  frameHelpText: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
   },
   statusCard: {
     marginBottom: spacing.md,
