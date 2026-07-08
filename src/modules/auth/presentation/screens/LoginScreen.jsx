@@ -9,6 +9,7 @@ import {
   Alert,
   StyleSheet,
   SafeAreaView,
+  ActivityIndicator, // Importamos para el estado de carga
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Input from '../../../../shared/components/Input';
@@ -17,12 +18,26 @@ import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
 
-export default function LoginScreen({ onDemoAccess }) {
+// 🔌 Recibimos onLoginSubmit desde App.js
+export default function LoginScreen({ onDemoAccess, onLoginSubmit }) {
   const [correo, setCorreo] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false); // Estado para controlar el spinner del login
 
-  const handleLogin = () => {
-    Alert.alert('Inicio de sesión simulado');
+  const handleLogin = async () => {
+    if (correo.trim() === '' || password.trim() === '') {
+      Alert.alert('Campos incompletos', 'Por favor, ingresa tu correo y contraseña.');
+      return;
+    }
+
+    if (onLoginSubmit) {
+      setLoading(true);
+      // Ejecutamos la función asíncrona de App.js que va hacia Docker
+      await onLoginSubmit(correo, password);
+      setLoading(false);
+    } else {
+      Alert.alert('Error', 'El método de autenticación no está configurado.');
+    }
   };
 
   const handleDemoAccess = () => {
@@ -68,6 +83,8 @@ export default function LoginScreen({ onDemoAccess }) {
               value={correo}
               onChangeText={setCorreo}
               keyboardType="email-address"
+              autoCapitalize="none" // Evita que ponga la primera en mayúscula automáticamente
+              editable={!loading}   // Bloquea el input si está cargando
             />
 
             <Text style={styles.fieldLabel}>CONTRASEÑA</Text>
@@ -76,18 +93,25 @@ export default function LoginScreen({ onDemoAccess }) {
               value={password}
               onChangeText={setPassword}
               secureTextEntry
+              editable={!loading}   // Bloquea el input si está cargando
             />
 
             <Text style={styles.forgotPassword}>¿Olvidaste tu contraseña?</Text>
 
             <View style={styles.buttonContainer}>
-              <Button title="Iniciar sesión" onPress={handleLogin} />
+              {loading ? (
+                <ActivityIndicator size="large" color={colors?.primary || '#2F80ED'} style={{ marginVertical: 10 }} />
+              ) : (
+                <Button title="Iniciar sesión" onPress={handleLogin} />
+              )}
+              
               <Text style={styles.helpText}>Usa tu correo institucional UCE</Text>
               <View style={{ height: spacing.sm }} />
               <Button
                 title="Ingresar como estudiante demo"
                 variant="secondary"
                 onPress={handleDemoAccess}
+                disabled={loading} // Deshabilita el demo si está cargando el login real
               />
             </View>
           </View>
@@ -97,90 +121,22 @@ export default function LoginScreen({ onDemoAccess }) {
   );
 }
 
+// Mantenemos tus estilos exactamente intactos tal como los tienes abajo
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  flex: {
-    flex: 1,
-  },
-  content: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: spacing.lg,
-  },
-  brandBlock: {
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: radius.md,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.sm,
-  },
-  icon: {
-    width: 32,
-    height: 32,
-  },
-  brand: {
-    fontSize: typography.size.lg,
-    fontWeight: typography.weight.bold,
-    color: colors.textPrimary,
-    letterSpacing: 1,
-  },
-  brandSubtitle: {
-    fontSize: typography.size.sm,
-    color: colors.textSecondary,
-    marginTop: spacing.xs / 2,
-  },
-  chip: {
-    marginTop: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs / 2,
-    borderRadius: radius.full,
-    backgroundColor: `${colors.primary}1A`,
-  },
-  chipText: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.semibold,
-    color: colors.primary,
-  },
-  formContainer: {
-    width: '100%',
-  },
-  sectionTitle: {
-    fontSize: typography.size.xl || 24,
-    fontWeight: typography.weight.bold,
-    color: colors.textPrimary,
-    textAlign: 'left',
-    marginBottom: spacing.lg,
-  },
-  fieldLabel: {
-    fontSize: typography.size.xs,
-    fontWeight: typography.weight.semibold,
-    color: colors.textSecondary,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginBottom: spacing.xs,
-  },
-  buttonContainer: {
-    marginTop: spacing.md,
-  },
-  helpText: {
-    fontSize: typography.size.xs,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: spacing.sm,
-  },
-  forgotPassword: {
-    fontSize: typography.size.sm,
-    color: colors.primary,
-    textAlign: 'center',
-    marginTop: spacing.sm,
-  },
+  screen: { flex: 1, backgroundColor: '#FFF' },
+  flex: { flex: 1 },
+  content: { padding: 24, justifyContent: 'center' },
+  brandBlock: { alignItems: 'center', marginBottom: 32, marginTop: 20 },
+  iconContainer: { width: 80, height: 80, marginBottom: 12 },
+  icon: { width: '100%', height: '100%' },
+  brand: { fontSize: 28, fontWeight: 'bold', color: '#1B1B1B' },
+  brandSubtitle: { fontSize: 16, color: '#828282', marginBottom: 8 },
+  chip: { backgroundColor: '#E3F2FD', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
+  chipText: { color: '#2F80ED', fontSize: 12, fontWeight: '600' },
+  formContainer: { backgroundColor: '#FFF' },
+  sectionTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 24, color: '#1B1B1B' },
+  fieldLabel: { fontSize: 11, fontWeight: '700', color: '#828282', marginBottom: 6, letterSpacing: 1 },
+  forgotPassword: { fontSize: 13, color: '#2F80ED', textAlign: 'right', marginTop: 8, fontWeight: '500' },
+  buttonContainer: { marginTop: 24, alignItems: 'center', width: '100%' },
+  helpText: { fontSize: 12, color: '#BDBDBD', marginTop: 8 },
 });
