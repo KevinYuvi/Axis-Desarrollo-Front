@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
@@ -14,7 +14,7 @@ import { useOccupancy } from '../../../../shared/hooks/useOccupancy';
 
 const FILTERS = ['Todas', 'Bibliotecas', 'Salas', 'Computadoras'];
 
-export default function LibrariesScreen({ onNavigate }) {
+export default function LibrariesScreen({ onNavigate, onNavigateToCamera }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('Todas');
   const { loading, isFallback, spaces } = useOccupancy();
@@ -40,18 +40,7 @@ export default function LibrariesScreen({ onNavigate }) {
   }, [searchQuery, activeFilter, spaces]);
 
   const handleSpaceDetail = (space) => {
-    const raw = space.raw;
-    const detailLines = raw
-      ? [
-          `${raw.building} · ${raw.floor}`,
-          `Puestos: ${raw.freeSeats} libres de ${raw.totalSeats}`,
-          `Computadoras: ${raw.computersAvailable} de ${raw.computersTotal}`,
-          `Salas de estudio: ${raw.studyRoomsAvailable} de ${raw.studyRoomsTotal}`,
-          raw.recommendationReason,
-        ]
-      : [`${space.type} · ${space.distanceTime}`, `${space.occupancy}% ocupación`];
-
-    Alert.alert(space.name, detailLines.filter(Boolean).join('\n'));
+    onNavigateToCamera(space.id);
   };
 
   return (

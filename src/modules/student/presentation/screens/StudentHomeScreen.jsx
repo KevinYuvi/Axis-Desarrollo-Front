@@ -12,7 +12,7 @@ import SearchInput from '../../../../shared/components/SearchInput';
 import BottomTabBar from '../../../../shared/components/BottomTabBar';
 import { useOccupancy } from '../../../../shared/hooks/useOccupancy';
 
-export default function StudentHomeScreen({ onNavigate }) {
+export default function StudentHomeScreen({ onNavigate, onNavigateToCamera }) {
   const { loading, isFallback, summary, recommendation } = useOccupancy();
 
   const handleRecommendation = () => {
@@ -20,7 +20,7 @@ export default function StudentHomeScreen({ onNavigate }) {
       Alert.alert('Axis', 'Todavía no hay una recomendación disponible.');
       return;
     }
-    Alert.alert(`Recomendado por Axis: ${recommendation.space.name}`, recommendation.reason);
+    onNavigateToCamera(recommendation.space.id);
   };
   const handleAllLibraries = () => onNavigate('libraries');
 
