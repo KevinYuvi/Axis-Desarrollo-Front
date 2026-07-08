@@ -85,6 +85,10 @@ export default function DashboardLayout() {
           tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
         }}
       />
+      <Tabs.Screen 
+        name="edificio/[id]" 
+        options={{ href: null, headerShown: false }} 
+      />
     </Tabs>
   );
 }

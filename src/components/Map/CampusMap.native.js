@@ -97,7 +97,7 @@ export default function CampusMap() {
     }
     
     console.log("🟢 2. ID DEL EDIFICIO CAPTURADO:", selectedBuilding.id);
-    const rutaDestino = `/edificio/${selectedBuilding.id}`;
+    const rutaDestino = `/(dashboard)/edificio/${selectedBuilding.id}`;
     console.log("🔵 3. RUTA GENERADA EXACTA:", rutaDestino);
 
     try {

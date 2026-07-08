@@ -1,62 +1,82 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-// Importamos los dos planos que acabas de crear
-import Piso01 from '../../src/components/Planos/Piso01';
-import Piso02 from '../../src/components/Planos/Piso02';
+import Piso01 from '../../../src/components/Planos/Piso01';
+import Piso02 from '../../../src/components/Planos/Piso02';
 
 export default function EdificioDetalleScreen() {
+  console.log("🟠 [DETALLE] 1. Renderizando cascarón de la pantalla...");
+  
   const { id } = useLocalSearchParams();
   const router = useRouter();
   
-  // Estado para controlar qué piso estamos viendo
   const [pisoActivo, setPisoActivo] = useState(1);
+  const [mapaListo, setMapaListo] = useState(false);
 
-  // Función que se dispara cuando tocas un aula en el SVG
+  useEffect(() => {
+    console.log(`🟢 [DETALLE] 2. Pantalla montada exitosamente. ID recibido: ${id}`);
+    console.log("⏳ [DETALLE] 3. Iniciando temporizador para no congelar la transición...");
+    
+    // Le daremos 1 segundo completo (1000ms) para que la pantalla termine su animación
+    // de entrada antes de tirarle el trabajo pesado del SVG.
+    const timer = setTimeout(() => {
+      console.log("✅ [DETALLE] 4. Temporizador terminado. ¡Iniciando dibujo del SVG!");
+      setMapaListo(true);
+    }, 1000);
+
+    return () => {
+      console.log("🔴 [DETALLE] Pantalla desmontada (Saliendo).");
+      clearTimeout(timer);
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (mapaListo) {
+      console.log(`🎨 [DETALLE] 5. El componente SVG (Piso ${pisoActivo}) se está inyectando en la vista.`);
+    }
+  }, [mapaListo, pisoActivo]);
+
   const manejarToqueAula = (nombreAula) => {
     Alert.alert("Interacción SVG", `Has seleccionado: ${nombreAula}`);
   };
 
   return (
     <View style={styles.container}>
-      {/* HEADER DE NAVEGACIÓN */}
+      {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edificio de Ingeniería</Text>
+        <Text style={styles.headerTitle}>Detalle: {id}</Text>
         <View style={{ width: 24 }} />
       </View>
 
       {/* SELECTOR DE PISOS */}
       <View style={styles.floorSelectorContainer}>
-        <TouchableOpacity 
-          style={[styles.floorButton, pisoActivo === 1 && styles.floorButtonActive]}
-          onPress={() => setPisoActivo(1)}
-        >
+        <TouchableOpacity style={[styles.floorButton, pisoActivo === 1 && styles.floorButtonActive]} onPress={() => setPisoActivo(1)}>
           <Text style={[styles.floorButtonText, pisoActivo === 1 && styles.floorButtonTextActive]}>Planta Baja</Text>
         </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.floorButton, pisoActivo === 2 && styles.floorButtonActive]}
-          onPress={() => setPisoActivo(2)}
-        >
+        <TouchableOpacity style={[styles.floorButton, pisoActivo === 2 && styles.floorButtonActive]} onPress={() => setPisoActivo(2)}>
           <Text style={[styles.floorButtonText, pisoActivo === 2 && styles.floorButtonTextActive]}>Primer Piso</Text>
         </TouchableOpacity>
       </View>
 
-      {/* ÁREA DEL MAPA SVG DINÁMICO */}
+      {/* ÁREA DEL MAPA */}
       <View style={styles.svgContainer}>
-        {pisoActivo === 1 ? (
-          <Piso01 onAulaPress={manejarToqueAula} />
+        {!mapaListo ? (
+          <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+            <ActivityIndicator size="large" color="#3B82F6" />
+            <Text style={{ marginTop: 10, color: '#6B7280', fontWeight: 'bold' }}>Cargando motor vectorial...</Text>
+            <Text style={{ marginTop: 5, color: '#9CA3AF', fontSize: 12 }}>Preparando aceleración de hardware</Text>
+          </View>
         ) : (
-          <Piso02 onAulaPress={manejarToqueAula} />
+          pisoActivo === 1 ? <Piso01 onAulaPress={manejarToqueAula} /> : <Piso02 onAulaPress={manejarToqueAula} />
         )}
       </View>
 
-      {/* ÁREA DE INFORMACIÓN DE AULAS */}
+      {/* INFORMACIÓN DE AULAS */}
       <ScrollView style={styles.infoContainer}>
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
@@ -73,27 +93,15 @@ export default function EdificioDetalleScreen() {
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>
-          Listado - {pisoActivo === 1 ? 'Planta Baja' : 'Primer Piso'}
-        </Text>
+        <Text style={styles.sectionTitle}>Listado de Espacios</Text>
 
         <View style={styles.aulaCard}>
           <View style={styles.aulaInfo}>
-            <Text style={styles.aulaTitle}>{pisoActivo === 1 ? 'Aula 101' : 'Aula 201'}</Text>
+            <Text style={styles.aulaTitle}>Aula 101</Text>
             <Text style={styles.aulaSubtitle}>Ingeniería de Software</Text>
           </View>
           <View style={[styles.badge, { backgroundColor: '#D1FAE5' }]}>
             <Text style={[styles.badgeText, { color: '#065F46' }]}>Disponible</Text>
-          </View>
-        </View>
-
-        <View style={styles.aulaCard}>
-          <View style={styles.aulaInfo}>
-            <Text style={styles.aulaTitle}>{pisoActivo === 1 ? 'Lab de Redes' : 'Auditorio Principal'}</Text>
-            <Text style={styles.aulaSubtitle}>Mantenimiento programado</Text>
-          </View>
-          <View style={[styles.badge, { backgroundColor: '#FEE2E2' }]}>
-            <Text style={[styles.badgeText, { color: '#991B1B' }]}>Ocupado</Text>
           </View>
         </View>
       </ScrollView>
@@ -105,16 +113,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FAFAFA' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 50, paddingBottom: 16, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   backButton: { padding: 4 },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
-  
-  /* SELECTOR DE PISOS */
+  headerTitle: { fontSize: 16, fontWeight: 'bold', color: '#111827' },
   floorSelectorContainer: { flexDirection: 'row', backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', justifyContent: 'center' },
   floorButton: { paddingVertical: 8, paddingHorizontal: 20, borderRadius: 20, backgroundColor: '#F3F4F6', marginHorizontal: 5 },
   floorButtonActive: { backgroundColor: '#3B82F6' },
   floorButtonText: { color: '#6B7280', fontWeight: '600', fontSize: 14 },
   floorButtonTextActive: { color: '#FFFFFF' },
-
-  svgContainer: { height: '40%', backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  svgContainer: { height: '45%', backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   infoContainer: { flex: 1, backgroundColor: '#FFFFFF', padding: 20 },
   statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 },
   statBox: { flex: 1, backgroundColor: '#FFFFFF', marginHorizontal: 4, paddingVertical: 16, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: '#F3F4F6', elevation: 2 },
