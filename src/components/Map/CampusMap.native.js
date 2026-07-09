@@ -1,16 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform, Alert } from 'react-native';
 
-// FASE 1 y 2: Eliminado PROVIDER_GOOGLE y MapViewDirections. Conservamos MapView, Marker y agregamos UrlTile.
-import MapView, { Marker, UrlTile } from 'react-native-maps'; 
-
-// FASE 4: expo-location intacto
+// FASE 7: Importamos Polyline para dibujar la respuesta de OSRM
+import MapView, { Marker, UrlTile, Polyline } from 'react-native-maps'; 
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 
-// FASE 5: Coordenadas intactas
 const FACULTADES_REGION = {
   general: { latitude: -0.1995, longitude: -78.5028, latitudeDelta: 0.007, longitudeDelta: 0.007 },
   ingenieria: { latitude: -0.1976, longitude: -78.5015, latitudeDelta: 0.002, longitudeDelta: 0.002 },
@@ -42,6 +39,9 @@ export default function CampusMap() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('Todos');
   const [userLocation, setUserLocation] = useState(null);
+  
+  // FASE 7: Estado para almacenar la geometría de la ruta
+  const [routeCoordinates, setRouteCoordinates] = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -74,7 +74,49 @@ export default function CampusMap() {
     return coincideFiltro && coincideBusqueda;
   });
 
-  // El botón "Info de aulas" sigue funcionando hacia la Fase 8 (SVGs intactos)
+  // =====================================================================
+  // FASE 6: FETCH A OSRM (OPEN SOURCE ROUTING MACHINE)
+  // =====================================================================
+  const trazarRutaOSRM = async () => {
+    if (!userLocation || !selectedBuilding) {
+      Alert.alert("Buscando GPS...", "Aún estamos obteniendo tu ubicación, intenta en un segundo.");
+      return;
+    }
+
+    try {
+      // OSRM requiere el formato: longitud,latitud
+      const start = `${userLocation.longitude},${userLocation.latitude}`;
+      const end = `${selectedBuilding.coordinate.longitude},${selectedBuilding.coordinate.latitude}`;
+      
+      // Petición a la API pública de OSRM perfil peatonal (foot)
+      const url = `https://router.project-osrm.org/route/v1/foot/${start};${end}?overview=full&geometries=geojson`;
+      
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (data.routes && data.routes.length > 0) {
+        // Mapeamos el GeoJSON de OSRM al formato de React Native Maps
+        const coordinates = data.routes[0].geometry.coordinates.map(coord => ({
+          latitude: coord[1],
+          longitude: coord[0]
+        }));
+        
+        setRouteCoordinates(coordinates);
+
+        // Ajustamos la cámara para que toda la ruta sea visible en pantalla
+        mapRef.current.fitToCoordinates(coordinates, {
+          edgePadding: { right: 50, bottom: 350, left: 50, top: 150 },
+          animated: true
+        });
+      } else {
+        Alert.alert("Ruta no encontrada", "No se pudo generar un camino peatonal hasta este edificio.");
+      }
+    } catch (error) {
+      console.log("Error al trazar ruta OSRM:", error);
+      Alert.alert("Error de conexión", "No se pudo calcular la ruta en este momento.");
+    }
+  };
+
   const intentarNavegar = () => {
     if (!selectedBuilding) return;
     const rutaDestino = `/(dashboard)/edificio/${selectedBuilding.id}`;
@@ -90,7 +132,11 @@ export default function CampusMap() {
     return (
       <TouchableOpacity 
         style={[styles.chip, isActive && styles.chipActive]} 
-        onPress={() => { setActiveFilter(label); setSelectedBuilding(null); }}
+        onPress={() => { 
+          setActiveFilter(label); 
+          setSelectedBuilding(null); 
+          setRouteCoordinates([]); // Limpia la ruta al cambiar filtros
+        }}
       >
         <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{label}</Text>
       </TouchableOpacity>
@@ -99,25 +145,34 @@ export default function CampusMap() {
 
   return (
     <View style={styles.container}>
-      {/* Eliminado PROVIDER_GOOGLE. El mapa nativo actuará como un lienzo vacío */}
       <MapView
         ref={mapRef}
         style={styles.map}
         initialRegion={FACULTADES_REGION.general}
         showsUserLocation={true}
         showsMyLocationButton={false}
-        mapType="none" // Apaga el renderizado nativo base
-        onPress={() => setSelectedBuilding(null)}
+        mapType="none" 
+        onPress={() => { 
+          setSelectedBuilding(null); 
+          setRouteCoordinates([]); // Limpia la ruta al tocar un espacio vacío
+        }}
       >
-        
-        {/* FASE 3: Inyección de OpenStreetMap mediante UrlTile */}
         <UrlTile
           urlTemplate="https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
           maximumZ={19}
           zIndex={-1} 
         />
 
-        {/* FASE 5: Los Markers siguen exactamente igual */}
+        {/* FASE 7: DIBUJO DE LA RUTA */}
+        {routeCoordinates.length > 0 && (
+          <Polyline
+            coordinates={routeCoordinates}
+            strokeWidth={5}
+            strokeColor="#3B82F6" 
+            zIndex={2}
+          />
+        )}
+
         {edificiosFiltrados.map((edificio) => (
           <Marker
             key={edificio.id}
@@ -129,6 +184,7 @@ export default function CampusMap() {
             onPress={(e) => {
               e.stopPropagation();
               setSelectedBuilding(edificio);
+              setRouteCoordinates([]); // Limpia rutas viejas al seleccionar un nuevo edificio
               mapRef.current.animateToRegion({
                 ...edificio.coordinate,
                 latitude: edificio.coordinate.latitude - 0.0005,
@@ -169,8 +225,8 @@ export default function CampusMap() {
           </View>
 
           <View style={styles.buttonRow}>
-            {/* El botón de ruta está listo para que le conectemos OSRM en la Fase 6 */}
-            <TouchableOpacity style={styles.secondaryButton} onPress={() => Alert.alert("Fase 6 Pendiente", "Aquí conectaremos el fetch a OSRM")}>
+            {/* FASE 6: Botón conectado al Fetch */}
+            <TouchableOpacity style={styles.secondaryButton} onPress={trazarRutaOSRM}>
               <Ionicons name="navigate-outline" size={18} color="#3B82F6" />
               <Text style={styles.secondaryButtonText}>Ruta para llegar</Text>
             </TouchableOpacity>
