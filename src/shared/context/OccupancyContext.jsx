@@ -10,7 +10,7 @@ const TYPE_LABELS = {
 
 // Cada cuánto se refresca la ocupación en segundo plano (Fase 3 — el
 // vision-service ya analiza automáticamente con este mismo intervalo).
-const POLL_INTERVAL_MS = 30000;
+const POLL_INTERVAL_MS = 10000;
 
 /**
  * Mapea los datos del espacio devueltos por el API al formato requerido por las vistas
@@ -82,7 +82,7 @@ export function OccupancyProvider({ children }) {
   /**
    * Carga los espacios y recomendación de ocupación desde el API.
    * En refrescos automáticos (silent) no reactiva el loader de pantalla
-   * completa, para no interrumpir al usuario cada 30 segundos.
+   * completa, para no interrumpir al usuario cada 10 segundos.
    * @param {Object} [options]
    * @param {boolean} [options.silent] - Si es true, no muestra el loader de carga
    */
