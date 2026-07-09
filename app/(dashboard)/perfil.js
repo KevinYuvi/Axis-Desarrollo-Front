@@ -1,34 +1,145 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth, useUser } from '@clerk/clerk-expo';
+import { colors } from '../../src/shared/theme/colors';
+import { typography } from '../../src/shared/theme/typography';
+import { spacing, radius } from '../../src/shared/theme/spacing';
+import { AppHeader } from '../../src/shared/components';
+
+const ROL_LABEL = {
+  estudiante: 'Estudiante',
+  docente: 'Docente',
+  ayudante: 'Ayudante',
+  admin: 'Administrador',
+};
 
 export default function PerfilScreen() {
   const { signOut } = useAuth();
   const { user } = useUser();
-  const rol = user?.publicMetadata?.rol || 'Estudiante';
+  const rol = user?.publicMetadata?.rol?.toLowerCase() || 'estudiante';
+  const nombre = user?.fullName || user?.firstName || 'Usuario';
+  const email = user?.primaryEmailAddress?.emailAddress || '';
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Mi Perfil</Text>
-      <Text style={styles.subtitle}>{user?.primaryEmailAddress?.emailAddress}</Text>
-      
-      <View style={styles.badge}>
-        <Text style={styles.badgeText}>Rol activo: {rol.toUpperCase()}</Text>
-      </View>
+    <SafeAreaView style={styles.screen} edges={['top']}>
+      <StatusBar style="dark" />
+      <AppHeader rol={rol} />
 
-      <TouchableOpacity onPress={() => signOut()} style={styles.logoutButton}>
-        <Text style={styles.logoutText}>Cerrar Sesión</Text>
-      </TouchableOpacity>
-    </View>
+      <ScrollView contentContainerStyle={styles.content}>
+
+        {/* Avatar */}
+        <View style={styles.avatarContainer}>
+          <View style={styles.avatar}>
+            <Ionicons name="person" size={48} color={colors.primary} />
+          </View>
+          <Text style={styles.nombre}>{nombre}</Text>
+          <Text style={styles.email}>{email}</Text>
+          <View style={styles.rolBadge}>
+            <Text style={styles.rolBadgeText}>{ROL_LABEL[rol] || 'Usuario'}</Text>
+          </View>
+        </View>
+
+        {/* Separador */}
+        <View style={styles.divider} />
+
+        {/* Info extra */}
+        <View style={styles.infoRow}>
+          <Ionicons name="school-outline" size={20} color={colors.textSecondary} />
+          <Text style={styles.infoText}>Universidad Central del Ecuador</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Ionicons name="shield-checkmark-outline" size={20} color={colors.textSecondary} />
+          <Text style={styles.infoText}>Cuenta verificada con Clerk</Text>
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* Cerrar sesión */}
+        <TouchableOpacity onPress={() => signOut()} style={styles.logoutButton}>
+          <Ionicons name="log-out-outline" size={20} color="#fff" style={{ marginRight: spacing.sm }} />
+          <Text style={styles.logoutText}>Cerrar Sesión</Text>
+        </TouchableOpacity>
+
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FAFAFA' },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#111827' },
-  subtitle: { fontSize: 14, color: '#6B7280', marginTop: 5, marginBottom: 20 },
-  badge: { backgroundColor: '#DBEAFE', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, marginBottom: 40 },
-  badgeText: { color: '#1D4ED8', fontWeight: 'bold', fontSize: 12 },
-  logoutButton: { backgroundColor: '#EF4444', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8 },
-  logoutText: { color: 'white', fontWeight: 'bold', fontSize: 16 }
+  screen: {
+    flex: 1,
+    backgroundColor: colors.white,
+  },
+  content: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xxl,
+  },
+  avatarContainer: {
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  avatar: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  nombre: {
+    fontSize: typography.size.xl,
+    fontWeight: typography.weight.bold,
+    color: colors.textPrimary,
+  },
+  email: {
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+    marginTop: 4,
+    marginBottom: spacing.sm,
+  },
+  rolBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+  },
+  rolBadgeText: {
+    color: colors.primary,
+    fontWeight: typography.weight.bold,
+    fontSize: typography.size.xs,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.lg,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  infoText: {
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+  },
+  logoutButton: {
+    backgroundColor: colors.danger,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    marginTop: spacing.sm,
+  },
+  logoutText: {
+    color: '#fff',
+    fontWeight: typography.weight.bold,
+    fontSize: typography.size.md,
+  },
 });

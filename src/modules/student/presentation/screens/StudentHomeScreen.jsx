@@ -1,15 +1,21 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Image, ActivityIndicator } from 'react-native';
+import {
+  View, Text, StyleSheet, ScrollView,
+  TouchableOpacity, Alert, ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
+import { useUser } from '@clerk/clerk-expo';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
-import { Button, AppHeader, SearchInput, BottomTabBar } from '../../../../shared/components';
+import { Button, AppHeader, SearchInput } from '../../../../shared/components';
 import { useOccupancy } from '../../../../shared/hooks/useOccupancy';
 
 export default function StudentHomeScreen({ onNavigate, onNavigateToCamera }) {
+  const { user } = useUser();
+  const rol = user?.publicMetadata?.rol?.toLowerCase() || 'estudiante';
   const { loading, isFallback, summary, recommendation } = useOccupancy();
 
   const handleRecommendation = () => {
@@ -19,16 +25,19 @@ export default function StudentHomeScreen({ onNavigate, onNavigateToCamera }) {
     }
     onNavigateToCamera(recommendation.space.id);
   };
+
   const handleAllLibraries = () => onNavigate('libraries');
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={styles.screen} edges={['top']}>
       <StatusBar style="dark" />
+
+      {/* ── Cabecera única (no hay header nativo de Expo Router) ── */}
+      <AppHeader rol={rol} />
+
       <ScrollView contentContainerStyle={styles.content}>
 
-        <AppHeader />
-
-        {/* Titles */}
+        {/* Títulos */}
         <Text style={styles.title}>Encuentra dónde estudiar</Text>
         <Text style={styles.subtitle}>Espacios disponibles en el campus UCE</Text>
 
@@ -45,7 +54,7 @@ export default function StudentHomeScreen({ onNavigate, onNavigateToCamera }) {
           <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.xl }} />
         ) : (
           <>
-            {/* Summary Cards */}
+            {/* Tarjetas de resumen */}
             <View style={styles.summaryContainer}>
               <View style={styles.summaryCard}>
                 <Text style={[styles.summaryNumber, { color: colors.available }]}>{summary.tables}</Text>
@@ -61,7 +70,7 @@ export default function StudentHomeScreen({ onNavigate, onNavigateToCamera }) {
               </View>
             </View>
 
-            {/* Recommended Card */}
+            {/* Tarjeta recomendada */}
             {recommendation && (
               <View style={styles.recommendedCard}>
                 <View style={styles.recommendedBadge}>
@@ -70,7 +79,11 @@ export default function StudentHomeScreen({ onNavigate, onNavigateToCamera }) {
                 </View>
                 <Text style={styles.recommendedTitle}>{recommendation.space.name}</Text>
                 <Text style={styles.recommendedDesc}>
-                  {recommendation.space.occupancyPercent ?? recommendation.space.occupancy}% ocupación · {recommendation.space.freeSeats ?? recommendation.space.availableTables} puestos libres · A {recommendation.space.distanceMinutes ? `${recommendation.space.distanceMinutes} min` : recommendation.space.distanceTime}
+                  {recommendation.space.occupancyPercent ?? recommendation.space.occupancy}% ocupación ·{' '}
+                  {recommendation.space.freeSeats ?? recommendation.space.availableTables} puestos libres ·{' '}
+                  A {recommendation.space.distanceMinutes
+                    ? `${recommendation.space.distanceMinutes} min`
+                    : recommendation.space.distanceTime}
                 </Text>
                 <Button title="Ver recomendación" onPress={handleRecommendation} />
               </View>
@@ -78,14 +91,12 @@ export default function StudentHomeScreen({ onNavigate, onNavigateToCamera }) {
           </>
         )}
 
-        {/* Secondary Button */}
+        {/* Botón secundario */}
         <TouchableOpacity style={styles.secondaryButton} onPress={handleAllLibraries}>
           <Text style={styles.secondaryButtonText}>Ver todas las bibliotecas →</Text>
         </TouchableOpacity>
 
       </ScrollView>
-
-      <BottomTabBar activeTab="home" onTabPress={(tab) => onNavigate(tab)} />
     </SafeAreaView>
   );
 }
@@ -96,8 +107,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
   },
   content: {
-    padding: spacing.lg,
-    paddingBottom: 100,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
   },
   title: {
     fontSize: typography.size.xl,
@@ -187,6 +199,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     alignItems: 'center',
     backgroundColor: colors.white,
+    marginTop: spacing.sm,
   },
   secondaryButtonText: {
     fontSize: typography.size.sm,

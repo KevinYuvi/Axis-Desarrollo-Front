@@ -2,29 +2,34 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
+import { useUser } from '@clerk/clerk-expo';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
-import { AppHeader, BottomTabBar } from '../../../../shared/components';
+import { AppHeader } from '../../../../shared/components';
 
 export default function AssistantScreen({ onNavigate }) {
-  return (
-    <SafeAreaView style={styles.screen}>
-      <StatusBar style="dark" />
-      <View style={styles.content}>
-        <AppHeader />
+  const { user } = useUser();
+  const rol = user?.publicMetadata?.rol?.toLowerCase() || 'estudiante';
 
+  return (
+    <SafeAreaView style={styles.screen} edges={['top']}>
+      <StatusBar style="dark" />
+
+      {/* ── Cabecera única ── */}
+      <AppHeader rol={rol} />
+
+      <View style={styles.content}>
         <View style={styles.placeholder}>
-          <MaterialCommunityIcons name="robot-outline" size={48} color={colors.primary} />
-          <Text style={styles.title}>Asistente Axis</Text>
+          <Ionicons name="chatbubble-ellipses-outline" size={52} color={colors.primary} />
+          <Text style={styles.title}>Asistente AXIS</Text>
           <Text style={styles.message}>
-            El asistente de Axis recomendará espacios según disponibilidad en tiempo real.
+            El asistente de AXIS recomendará espacios según disponibilidad en tiempo real
+            y puede realizar acciones por voz o texto.
           </Text>
         </View>
       </View>
-
-      <BottomTabBar activeTab="assistant" onTabPress={(tab) => onNavigate(tab)} />
     </SafeAreaView>
   );
 }
@@ -59,5 +64,6 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     color: colors.textSecondary,
     textAlign: 'center',
+    lineHeight: 22,
   },
 });

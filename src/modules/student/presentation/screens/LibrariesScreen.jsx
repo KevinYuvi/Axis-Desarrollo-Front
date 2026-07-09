@@ -1,12 +1,16 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import {
+  View, Text, StyleSheet, ScrollView,
+  TouchableOpacity, ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
+import { useUser } from '@clerk/clerk-expo';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
-import { AppHeader, SearchInput, BottomTabBar, SpaceListCard } from '../../../../shared/components';
+import { AppHeader, SearchInput, SpaceListCard } from '../../../../shared/components';
 import { useOccupancy } from '../../../../shared/hooks/useOccupancy';
 
 const FILTERS = ['Todas', 'Bibliotecas', 'Salas', 'Computadoras'];
@@ -15,14 +19,15 @@ export default function LibrariesScreen({ onNavigate, onNavigateToCamera }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('Todas');
   const { loading, isFallback, spaces } = useOccupancy();
+  const { user } = useUser();
+  const rol = user?.publicMetadata?.rol?.toLowerCase() || 'estudiante';
 
   const filteredLibraries = useMemo(() => {
     return spaces.filter(space => {
-      // Filter by search
-      const matchesSearch = space.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            space.type.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      // Filter by category
+      const matchesSearch =
+        space.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        space.type.toLowerCase().includes(searchQuery.toLowerCase());
+
       let matchesFilter = true;
       if (activeFilter === 'Bibliotecas') {
         matchesFilter = space.type === 'Biblioteca';
@@ -41,11 +46,13 @@ export default function LibrariesScreen({ onNavigate, onNavigateToCamera }) {
   };
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={styles.screen} edges={['top']}>
       <StatusBar style="dark" />
+
+      {/* ── Cabecera única ── */}
+      <AppHeader rol={rol} />
+
       <ScrollView contentContainerStyle={styles.content}>
-        
-        <AppHeader />
 
         <Text style={styles.title}>Bibliotecas y salas</Text>
         <Text style={styles.subtitle}>Consulta espacios disponibles en la UCE</Text>
@@ -63,10 +70,15 @@ export default function LibrariesScreen({ onNavigate, onNavigateToCamera }) {
           placeholder="Buscar biblioteca, sala o computadora..."
         />
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersContainer} contentContainerStyle={styles.filtersContent}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filtersContainer}
+          contentContainerStyle={styles.filtersContent}
+        >
           {FILTERS.map(filter => (
-            <TouchableOpacity 
-              key={filter} 
+            <TouchableOpacity
+              key={filter}
               style={[styles.filterChip, activeFilter === filter && styles.filterChipActive]}
               onPress={() => setActiveFilter(filter)}
             >
@@ -96,8 +108,6 @@ export default function LibrariesScreen({ onNavigate, onNavigateToCamera }) {
         </View>
 
       </ScrollView>
-
-      <BottomTabBar activeTab="libraries" onTabPress={(tab) => onNavigate(tab)} />
     </SafeAreaView>
   );
 }
@@ -108,8 +118,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
   },
   content: {
-    padding: spacing.lg,
-    paddingBottom: 100,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
   },
   title: {
     fontSize: typography.size.xl,
@@ -178,5 +189,5 @@ const styles = StyleSheet.create({
   emptyText: {
     color: colors.textSecondary,
     fontSize: typography.size.sm,
-  }
+  },
 });
