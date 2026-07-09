@@ -12,6 +12,6 @@
 // 3. Reemplaza el valor de abajo por esa IP y el puerto del backend (8000).
 //
 // Si usas un emulador Android, puedes usar 10.0.2.2 en vez de la IP local.
-const API_BASE_URL = 'http://192.168.100.194:8000/api';
+const API_BASE_URL = 'http://10.35.217.131:8000/api';
 
 export { API_BASE_URL };
