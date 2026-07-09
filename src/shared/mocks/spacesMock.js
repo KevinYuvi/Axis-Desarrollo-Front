@@ -1,0 +1,61 @@
+export const summaryMock = {
+  tables: 8,
+  computers: 5,
+  rooms: 3,
+};
+
+export const recommendedSpaceMock = {
+  id: 1,
+  name: 'Biblioteca FICA',
+  occupancy: 45,
+  availableTables: 14,
+  distanceTime: '5 min',
+  isRecommended: true,
+};
+
+export const librariesMock = [
+  {
+    id: 1,
+    name: 'Biblioteca FICA',
+    type: 'Biblioteca',
+    status: 'Disponible',
+    occupancy: 45,
+    availableTables: 14,
+    availableComputers: 5,
+    distanceTime: '5 min',
+    resources: ['Mesas', 'computadores', 'WiFi'],
+  },
+  {
+    id: 2,
+    name: 'Biblioteca General',
+    type: 'Biblioteca',
+    status: 'Próximo',
+    occupancy: 82,
+    availableTables: 6,
+    availableComputers: 2,
+    distanceTime: '8 min',
+    resources: ['Mesas', 'salas', 'WiFi'],
+  },
+  {
+    id: 3,
+    name: 'Sala Grupal 2',
+    type: 'Sala de estudio',
+    status: 'Disponible',
+    occupancy: 30,
+    availableTables: 4,
+    availableComputers: 0,
+    distanceTime: '3 min',
+    resources: ['Pizarra', 'tomacorrientes'],
+  },
+  {
+    id: 4,
+    name: 'Sala de Computadoras',
+    type: 'Laboratorio',
+    status: 'Ocupado',
+    occupancy: 100,
+    availableTables: 0,
+    availableComputers: 0,
+    distanceTime: '6 min',
+    resources: ['Computadoras', 'proyector'],
+  },
+];
