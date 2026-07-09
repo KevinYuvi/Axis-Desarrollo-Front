@@ -5,55 +5,76 @@ import { Ionicons } from '@expo/vector-icons';
 
 import Piso01 from '../../../src/components/Planos/Piso01';
 import Piso02 from '../../../src/components/Planos/Piso02';
+import { useApi } from '../../../src/hooks/useApi'; // 🔴 Inyectamos nuestra conexión segura
 
 export default function EdificioDetalleScreen() {
-  console.log("🟠 [DETALLE] 1. Renderizando cascarón de la pantalla...");
-  
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const api = useApi();
   
   const [pisoActivo, setPisoActivo] = useState(1);
   const [mapaListo, setMapaListo] = useState(false);
+  
+  // 🔴 Estados para la Base de Datos
+  const [aulas, setAulas] = useState([]);
+  const [cargandoAulas, setCargandoAulas] = useState(true);
 
+  // 1. Efecto para la transición del mapa SVG
   useEffect(() => {
-    console.log(`🟢 [DETALLE] 2. Pantalla montada exitosamente. ID recibido: ${id}`);
-    console.log("⏳ [DETALLE] 3. Iniciando temporizador para no congelar la transición...");
-    
-    // Le daremos 1 segundo completo (1000ms) para que la pantalla termine su animación
-    // de entrada antes de tirarle el trabajo pesado del SVG.
     const timer = setTimeout(() => {
-      console.log("✅ [DETALLE] 4. Temporizador terminado. ¡Iniciando dibujo del SVG!");
       setMapaListo(true);
     }, 1000);
-
-    return () => {
-      console.log("🔴 [DETALLE] Pantalla desmontada (Saliendo).");
-      clearTimeout(timer);
-    };
+    return () => clearTimeout(timer);
   }, [id]);
 
+  // 2. Efecto para descargar datos de MongoDB
   useEffect(() => {
-    if (mapaListo) {
-      console.log(`🎨 [DETALLE] 5. El componente SVG (Piso ${pisoActivo}) se está inyectando en la vista.`);
-    }
-  }, [mapaListo, pisoActivo]);
+    const fetchAulas = async () => {
+      try {
+        const response = await api.get('/espacios/');
+        // Filtramos solo las aulas que pertenecen a este edificio en específico
+        const aulasFiltradas = response.data.filter(espacio => espacio.bloque === id);
+        setAulas(aulasFiltradas);
+      } catch (error) {
+        console.log("Error al obtener aulas:", error);
+        Alert.alert("Error de conexión", "No se pudieron cargar las aulas de este edificio.");
+      } finally {
+        setCargandoAulas(false);
+      }
+    };
 
-  const manejarToqueAula = (nombreAula) => {
-    Alert.alert("Interacción SVG", `Has seleccionado: ${nombreAula}`);
+    fetchAulas();
+  }, [id]);
+
+  // 3. Función que recibe el toque desde el archivo SVG
+  const manejarToqueAula = (aulaSeleccionada) => {
+    if (!aulaSeleccionada) {
+      Alert.alert("Espacio no registrado", "Esta área no está mapeada en el sistema todavía.");
+      return;
+    }
+    
+    // Aquí, en la Fase 8, abriremos el panel para Reservar/Liberar el aula
+    Alert.alert(
+      `Has tocado: ${aulaSeleccionada.nombre}`, 
+      `Capacidad: ${aulaSeleccionada.capacidad} personas\nEstado: ${aulaSeleccionada.estado_actual.toUpperCase()}`
+    );
   };
+
+  // 4. Calculamos estadísticas matemáticas reales
+  const libres = aulas.filter(a => a.estado_actual === 'disponible').length;
+  const ocupadas = aulas.filter(a => a.estado_actual === 'ocupado').length;
+  const mantenimiento = aulas.filter(a => a.estado_actual === 'mantenimiento').length;
 
   return (
     <View style={styles.container}>
-      {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Detalle: {id}</Text>
+        <Text style={styles.headerTitle}>Gestión de Espacios</Text>
         <View style={{ width: 24 }} />
       </View>
 
-      {/* SELECTOR DE PISOS */}
       <View style={styles.floorSelectorContainer}>
         <TouchableOpacity style={[styles.floorButton, pisoActivo === 1 && styles.floorButtonActive]} onPress={() => setPisoActivo(1)}>
           <Text style={[styles.floorButtonText, pisoActivo === 1 && styles.floorButtonTextActive]}>Planta Baja</Text>
@@ -63,47 +84,58 @@ export default function EdificioDetalleScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ÁREA DEL MAPA */}
       <View style={styles.svgContainer}>
-        {!mapaListo ? (
+        {!mapaListo || cargandoAulas ? (
           <View style={{ alignItems: 'center', justifyContent: 'center' }}>
             <ActivityIndicator size="large" color="#3B82F6" />
-            <Text style={{ marginTop: 10, color: '#6B7280', fontWeight: 'bold' }}>Cargando motor vectorial...</Text>
-            <Text style={{ marginTop: 5, color: '#9CA3AF', fontSize: 12 }}>Preparando aceleración de hardware</Text>
+            <Text style={{ marginTop: 10, color: '#6B7280', fontWeight: 'bold' }}>Sincronizando campus...</Text>
           </View>
         ) : (
-          pisoActivo === 1 ? <Piso01 onAulaPress={manejarToqueAula} /> : <Piso02 onAulaPress={manejarToqueAula} />
+          // 🔴 Le pasamos la data real al plano SVG
+          pisoActivo === 1 ? <Piso01 aulasData={aulas} onAulaPress={manejarToqueAula} /> : <Piso02 aulasData={aulas} onAulaPress={manejarToqueAula} />
         )}
       </View>
 
-      {/* INFORMACIÓN DE AULAS */}
       <ScrollView style={styles.infoContainer}>
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
-            <Text style={[styles.statNumber, { color: '#10B981' }]}>8</Text>
+            <Text style={[styles.statNumber, { color: '#10B981' }]}>{libres}</Text>
             <Text style={styles.statLabel}>Libres</Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={[styles.statNumber, { color: '#EF4444' }]}>5</Text>
+            <Text style={[styles.statNumber, { color: '#EF4444' }]}>{ocupadas}</Text>
             <Text style={styles.statLabel}>Ocupadas</Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={[styles.statNumber, { color: '#F59E0B' }]}>3</Text>
-            <Text style={styles.statLabel}>Próximas</Text>
+            <Text style={[styles.statNumber, { color: '#F59E0B' }]}>{mantenimiento}</Text>
+            <Text style={styles.statLabel}>Mantenimiento</Text>
           </View>
         </View>
 
         <Text style={styles.sectionTitle}>Listado de Espacios</Text>
 
-        <View style={styles.aulaCard}>
-          <View style={styles.aulaInfo}>
-            <Text style={styles.aulaTitle}>Aula 101</Text>
-            <Text style={styles.aulaSubtitle}>Ingeniería de Software</Text>
+        {aulas.map((aula) => (
+          <View key={aula.id} style={styles.aulaCard}>
+            <View style={styles.aulaInfo}>
+              <Text style={styles.aulaTitle}>{aula.nombre}</Text>
+              <Text style={styles.aulaSubtitle}>{aula.tipo.toUpperCase()} • Capacidad: {aula.capacidad}</Text>
+            </View>
+            <View style={[
+              styles.badge, 
+              aula.estado_actual === 'disponible' ? { backgroundColor: '#D1FAE5' } :
+              aula.estado_actual === 'ocupado' ? { backgroundColor: '#FEE2E2' } : { backgroundColor: '#FEF3C7' }
+            ]}>
+              <Text style={[
+                styles.badgeText, 
+                aula.estado_actual === 'disponible' ? { color: '#065F46' } :
+                aula.estado_actual === 'ocupado' ? { color: '#991B1B' } : { color: '#92400E' }
+              ]}>{aula.estado_actual.toUpperCase()}</Text>
+            </View>
           </View>
-          <View style={[styles.badge, { backgroundColor: '#D1FAE5' }]}>
-            <Text style={[styles.badgeText, { color: '#065F46' }]}>Disponible</Text>
-          </View>
-        </View>
+        ))}
+        {aulas.length === 0 && !cargandoAulas && (
+          <Text style={{textAlign: 'center', color: '#9CA3AF', marginTop: 20}}>No hay espacios registrados en este bloque.</Text>
+        )}
       </ScrollView>
     </View>
   );
