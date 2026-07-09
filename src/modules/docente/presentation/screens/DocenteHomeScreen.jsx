@@ -16,6 +16,7 @@ import DetalleAulaScreen from './DetalleAulaScreen';
 import ReportarIncidenciaScreen from './ReportarIncidenciaScreen';
 import ReportesScreen from './ReportesScreen';
 import ReservarAulaScreen from './ReservarAulaScreen';
+import AsistenteIAScreen from './AsistenteIAScreen';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -147,6 +148,15 @@ export default function DocenteHomeScreen({ onNavigate, token }) {
           setPantallaActual('home');
           cargarCronograma();
         }}
+      />
+    );
+  }
+
+  if (pantallaActual === 'ia') {
+    return (
+      <AsistenteIAScreen
+        token={token}
+        onBack={() => setPantallaActual('home')}
       />
     );
   }
@@ -310,7 +320,10 @@ export default function DocenteHomeScreen({ onNavigate, token }) {
             <Text style={styles.tabLabel}>Reportes</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.tabItem}>
+          <TouchableOpacity
+            style={styles.tabItem}
+            onPress={() => setPantallaActual('ia')}
+          >
             <Ionicons name="chatbox-ellipses-outline" size={22} color="#828282" />
             <Text style={styles.tabLabel}>Asistente IA</Text>
           </TouchableOpacity>

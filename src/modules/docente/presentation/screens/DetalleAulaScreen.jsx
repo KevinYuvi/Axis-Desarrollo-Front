@@ -64,18 +64,17 @@ export default function DetalleAulaScreen({
     try {
       setLiberando(true);
 
-      const espacioId = claseActual.espacio.id;
+      const formData = new FormData();
+      formData.append('texto_chat', 'Libera mi aula');
 
-      const response = await fetch(
-        `${API_URL}/api/v1/espacios/${espacioId}/liberar`,
-        {
-          method: 'PATCH',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/json',
-          },
-        }
-      );
+      const response = await fetch(`${API_URL}/api/v1/ia/procesar-solicitud`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
+        body: formData,
+      });
 
       const data = await response.json();
 
@@ -83,10 +82,20 @@ export default function DetalleAulaScreen({
         throw new Error(data?.detail || 'No se pudo liberar el aula.');
       }
 
-      Alert.alert('Aula liberada', 'El aula fue marcada como disponible.');
+      if (data?.status !== 'success') {
+        throw new Error(
+          data?.respuesta_app || 'No se pudo liberar el aula desde el asistente.'
+        );
+      }
+
+      Alert.alert(
+        'Aula liberada',
+        data?.respuesta_app || 'El aula fue liberada correctamente.'
+      );
+
       onBack();
     } catch (error) {
-      console.error('Error liberando aula:', error);
+      console.error('Error liberando aula con IA:', error);
       Alert.alert('Error', error.message || 'No se pudo liberar el aula.');
     } finally {
       setLiberando(false);
@@ -206,8 +215,11 @@ export default function DetalleAulaScreen({
             <Ionicons name="document-text-outline" size={22} color="#828282" />
             <Text style={styles.tabLabel}>Reportes</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabItem}>
+          <TouchableOpacity
+            style={styles.tabItem}
+            onPress={onAbrirIA}
+            disabled={!onAbrirIA}
+          >
             <Ionicons name="chatbox-ellipses-outline" size={22} color="#828282" />
             <Text style={styles.tabLabel}>Asistente IA</Text>
           </TouchableOpacity>
