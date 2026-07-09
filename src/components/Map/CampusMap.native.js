@@ -1,55 +1,85 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform, Alert } from 'react-native';
 
-// FASE 7: Importamos Polyline para dibujar la respuesta de OSRM
 import MapView, { Marker, UrlTile, Polyline } from 'react-native-maps'; 
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 
+// 🔴 IMPORTAMOS TU NUEVO PUENTE SEGURO
+import { useApi } from '../../hooks/useApi';
+
 const FACULTADES_REGION = {
   general: { latitude: -0.1995, longitude: -78.5028, latitudeDelta: 0.007, longitudeDelta: 0.007 },
   ingenieria: { latitude: -0.1976, longitude: -78.5015, latitudeDelta: 0.002, longitudeDelta: 0.002 },
 };
 
-const EDIFICIOS_UCE = [
-  {
-    id: 'fac_ingenieria',
-    title: 'Edificio de Ingeniería',
-    description: 'Sistemas, Civil y Diseño',
-    type: 'facultad',
-    coordinate: { latitude: -0.1976, longitude: -78.5015 },
-  },
-  {
-    id: 'bib_central',
-    title: 'Biblioteca Central UCE',
-    description: 'Área de estudio y reserva',
-    type: 'biblioteca',
-    coordinate: { latitude: -0.2011, longitude: -78.5035 },
-  }
-];
+// Diccionario visual para embellecer los IDs de la base de datos
+const NOMBRES_EDIFICIOS = {
+  'edificio_a': 'Edificio de las A',
+  'edificio_labs': 'Edificio de los Laboratorios',
+  'fac_ingenieria': 'Facultad de Ingeniería',
+  'bib_central': 'Biblioteca Central UCE',
+  'fac_administrativas': 'Facultad de C. Administrativas'
+};
 
 export default function CampusMap() {
   const mapRef = useRef(null);
   const router = useRouter(); 
   const { user, isLoaded } = useUser();
+  const api = useApi(); // Instanciamos la conexión a FastAPI
   
+  const [edificiosDB, setEdificiosDB] = useState([]); // 🔴 Guardará los edificios desde Mongo
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('Todos');
   const [userLocation, setUserLocation] = useState(null);
-  
-  // FASE 7: Estado para almacenar la geometría de la ruta
   const [routeCoordinates, setRouteCoordinates] = useState([]);
+
+  // =====================================================================
+  // FASE 5: DESCARGA Y AGRUPACIÓN DE DATOS DESDE MONGODB
+  // =====================================================================
+  useEffect(() => {
+    const descargarAulas = async () => {
+      try {
+        // Hacemos la petición a FastAPI (Axios inyectará el Token de Clerk automáticamente)
+        const response = await api.get('/espacios/');
+        const espacios = response.data;
+
+        // Agrupamos las aulas por bloque para crear los pines del mapa
+        const mapaEdificios = new Map();
+        
+        espacios.forEach(espacio => {
+          if (!mapaEdificios.has(espacio.bloque) && espacio.coordenadas_gps) {
+            const [lat, lng] = espacio.coordenadas_gps.split(',').map(Number);
+            mapaEdificios.set(espacio.bloque, {
+              id: espacio.bloque,
+              title: NOMBRES_EDIFICIOS[espacio.bloque] || espacio.bloque,
+              description: `Toque para ver aulas y laboratorios`,
+              type: espacio.tipo === 'biblioteca' ? 'biblioteca' : 'facultad',
+              coordinate: { latitude: lat, longitude: lng }
+            });
+          }
+        });
+
+        // Convertimos el mapa en un Array y actualizamos el estado
+        setEdificiosDB(Array.from(mapaEdificios.values()));
+
+      } catch (error) {
+        console.log("Error descargando aulas de MongoDB:", error);
+      }
+    };
+
+    if (isLoaded && user) {
+      descargarAulas();
+    }
+  }, [isLoaded, user]);
 
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permiso denegado', 'Necesitamos tu ubicación para mostrarte en el campus.');
-        return;
-      }
+      if (status !== 'granted') return;
       let location = await Location.getCurrentPositionAsync({});
       setUserLocation({
         latitude: location.coords.latitude,
@@ -66,7 +96,8 @@ export default function CampusMap() {
     }
   }, [isLoaded, user]);
 
-  const edificiosFiltrados = EDIFICIOS_UCE.filter(edificio => {
+  // Filtramos la nueva lista reactiva que viene de Mongo
+  const edificiosFiltrados = edificiosDB.filter(edificio => {
     const coincideFiltro = activeFilter === 'Todos' || 
                           (activeFilter === 'Bibliotecas' && edificio.type === 'biblioteca') ||
                           (activeFilter === 'Facultades' && edificio.type === 'facultad');
@@ -74,54 +105,41 @@ export default function CampusMap() {
     return coincideFiltro && coincideBusqueda;
   });
 
-  // =====================================================================
-  // FASE 6: FETCH A OSRM (OPEN SOURCE ROUTING MACHINE)
-  // =====================================================================
   const trazarRutaOSRM = async () => {
     if (!userLocation || !selectedBuilding) {
-      Alert.alert("Buscando GPS...", "Aún estamos obteniendo tu ubicación, intenta en un segundo.");
+      Alert.alert("Buscando GPS...", "Aún estamos obteniendo tu ubicación.");
       return;
     }
 
     try {
-      // OSRM requiere el formato: longitud,latitud
       const start = `${userLocation.longitude},${userLocation.latitude}`;
       const end = `${selectedBuilding.coordinate.longitude},${selectedBuilding.coordinate.latitude}`;
-      
-      // Petición a la API pública de OSRM perfil peatonal (foot)
       const url = `https://router.project-osrm.org/route/v1/foot/${start};${end}?overview=full&geometries=geojson`;
       
       const response = await fetch(url);
       const data = await response.json();
 
       if (data.routes && data.routes.length > 0) {
-        // Mapeamos el GeoJSON de OSRM al formato de React Native Maps
         const coordinates = data.routes[0].geometry.coordinates.map(coord => ({
           latitude: coord[1],
           longitude: coord[0]
         }));
         
         setRouteCoordinates(coordinates);
-
-        // Ajustamos la cámara para que toda la ruta sea visible en pantalla
         mapRef.current.fitToCoordinates(coordinates, {
           edgePadding: { right: 50, bottom: 350, left: 50, top: 150 },
           animated: true
         });
-      } else {
-        Alert.alert("Ruta no encontrada", "No se pudo generar un camino peatonal hasta este edificio.");
       }
     } catch (error) {
       console.log("Error al trazar ruta OSRM:", error);
-      Alert.alert("Error de conexión", "No se pudo calcular la ruta en este momento.");
     }
   };
 
   const intentarNavegar = () => {
     if (!selectedBuilding) return;
-    const rutaDestino = `/(dashboard)/edificio/${selectedBuilding.id}`;
     try {
-      router.push(rutaDestino);
+      router.push(`/(dashboard)/edificio/${selectedBuilding.id}`);
     } catch (error) {
       console.log("Error al navegar:", error);
     }
@@ -135,7 +153,7 @@ export default function CampusMap() {
         onPress={() => { 
           setActiveFilter(label); 
           setSelectedBuilding(null); 
-          setRouteCoordinates([]); // Limpia la ruta al cambiar filtros
+          setRouteCoordinates([]); 
         }}
       >
         <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{label}</Text>
@@ -154,7 +172,7 @@ export default function CampusMap() {
         mapType="none" 
         onPress={() => { 
           setSelectedBuilding(null); 
-          setRouteCoordinates([]); // Limpia la ruta al tocar un espacio vacío
+          setRouteCoordinates([]); 
         }}
       >
         <UrlTile
@@ -163,7 +181,6 @@ export default function CampusMap() {
           zIndex={-1} 
         />
 
-        {/* FASE 7: DIBUJO DE LA RUTA */}
         {routeCoordinates.length > 0 && (
           <Polyline
             coordinates={routeCoordinates}
@@ -184,7 +201,7 @@ export default function CampusMap() {
             onPress={(e) => {
               e.stopPropagation();
               setSelectedBuilding(edificio);
-              setRouteCoordinates([]); // Limpia rutas viejas al seleccionar un nuevo edificio
+              setRouteCoordinates([]); 
               mapRef.current.animateToRegion({
                 ...edificio.coordinate,
                 latitude: edificio.coordinate.latitude - 0.0005,
@@ -225,7 +242,6 @@ export default function CampusMap() {
           </View>
 
           <View style={styles.buttonRow}>
-            {/* FASE 6: Botón conectado al Fetch */}
             <TouchableOpacity style={styles.secondaryButton} onPress={trazarRutaOSRM}>
               <Ionicons name="navigate-outline" size={18} color="#3B82F6" />
               <Text style={styles.secondaryButtonText}>Ruta para llegar</Text>
