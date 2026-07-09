@@ -6,10 +6,7 @@ import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
-import Button from '../../../../shared/components/Button';
-import AppHeader from '../../../../shared/components/AppHeader';
-import SearchInput from '../../../../shared/components/SearchInput';
-import BottomTabBar from '../../../../shared/components/BottomTabBar';
+import { Button, AppHeader, SearchInput, BottomTabBar } from '../../../../shared/components';
 import { useOccupancy } from '../../../../shared/hooks/useOccupancy';
 
 export default function StudentHomeScreen({ onNavigate, onNavigateToCamera }) {

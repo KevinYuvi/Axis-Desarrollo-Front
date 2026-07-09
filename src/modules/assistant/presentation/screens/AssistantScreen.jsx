@@ -6,8 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
-import AppHeader from '../../../../shared/components/AppHeader';
-import BottomTabBar from '../../../../shared/components/BottomTabBar';
+import { AppHeader, BottomTabBar } from '../../../../shared/components';
 
 export default function AssistantScreen({ onNavigate }) {
   return (

@@ -6,10 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
-import AppHeader from '../../../../shared/components/AppHeader';
-import SearchInput from '../../../../shared/components/SearchInput';
-import BottomTabBar from '../../../../shared/components/BottomTabBar';
-import SpaceListCard from '../../../../shared/components/SpaceListCard';
+import { AppHeader, SearchInput, BottomTabBar, SpaceListCard } from '../../../../shared/components';
 import { useOccupancy } from '../../../../shared/hooks/useOccupancy';
 
 const FILTERS = ['Todas', 'Bibliotecas', 'Salas', 'Computadoras'];
