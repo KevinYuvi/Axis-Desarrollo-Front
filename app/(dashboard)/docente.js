@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
 import DocenteHomeScreen from '../../src/modules/docente/presentation/screens/DocenteHomeScreen';
+import { colors } from '../../src/shared/theme/colors';
 
 export default function DocenteRoute() {
   const { getToken } = useAuth();
@@ -10,17 +11,16 @@ export default function DocenteRoute() {
   useEffect(() => {
     let activo = true;
     getToken().then((t) => activo && setToken(t));
-    return () => {
-      activo = false;
-    };
+    return () => { activo = false; };
   }, [getToken]);
 
   if (!token) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
+
   }
   return <DocenteHomeScreen token={token} />;
 }

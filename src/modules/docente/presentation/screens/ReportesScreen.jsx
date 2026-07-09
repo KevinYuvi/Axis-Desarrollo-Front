@@ -1,18 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  SafeAreaView,
-  StatusBar,
-  ActivityIndicator,
-  Alert,
-  ScrollView,
+  StyleSheet, Text, View, TouchableOpacity,
+  StatusBar, ActivityIndicator, Alert, ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+import { colors } from '../../../../shared/theme/colors';
+import { typography } from '../../../../shared/theme/typography';
+import { spacing, radius } from '../../../../shared/theme/spacing';
+
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
+const ESTADO_COLORS = {
+  abierto:    { bg: '#FEF3C7', text: '#D97706' },
+  en_proceso: { bg: '#EFF6FF', text: colors.primary },
+  resuelto:   { bg: '#F0FDF4', text: '#16A34A' },
+};
 
 export default function ReportesScreen({ token, onBack }) {
   const [reportes, setReportes] = useState([]);
@@ -25,20 +29,14 @@ export default function ReportesScreen({ token, onBack }) {
   const cargarReportes = async () => {
     try {
       setLoading(true);
-
       const response = await fetch(`${API_URL}/api/v1/reportes/mis-reportes`, {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
       });
 
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data?.detail || 'No se pudieron cargar los reportes.');
-      }
+      if (!response.ok) throw new Error(data?.detail || 'No se pudieron cargar los reportes.');
 
       setReportes(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -51,287 +49,169 @@ export default function ReportesScreen({ token, onBack }) {
 
   const formatearFecha = (fecha) => {
     if (!fecha) return 'Sin fecha';
-
     return new Date(fecha).toLocaleString([], {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: false,
     });
   };
 
   return (
-    <SafeAreaView style={styles.page}>
-      <View style={styles.appShell}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView style={styles.screen} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
 
-        <View style={styles.navbar}>
-          <View style={styles.brandRow}>
-            <TouchableOpacity style={styles.backBtn} onPress={onBack}>
-              <Ionicons name="arrow-back" size={22} color="#2F80ED" />
-            </TouchableOpacity>
+      {/* Cabecera con botón de regreso */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={onBack} accessibilityLabel="Volver">
+          <Ionicons name="arrow-back" size={22} color={colors.primary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Reportes realizados</Text>
+        <TouchableOpacity style={styles.iconBtn} onPress={cargarReportes} accessibilityLabel="Actualizar">
+          <Ionicons name="refresh-outline" size={22} color={colors.textPrimary} />
+        </TouchableOpacity>
+      </View>
 
-            <View style={styles.logoContainer}>
-              <Ionicons name="document-text-outline" size={18} color="#FFFFFF" />
-            </View>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollInner} showsVerticalScrollIndicator={false}>
 
-            <Text style={styles.brandText}>Reportes</Text>
-          </View>
-
-          <TouchableOpacity style={styles.iconBtn} onPress={cargarReportes}>
-            <Ionicons name="refresh-outline" size={22} color="#111827" />
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView
-          style={styles.scrollContent}
-          contentContainerStyle={styles.scrollInner}
-          showsVerticalScrollIndicator={false}
-        >
-          <Text style={styles.mainTitle}>Reportes realizados</Text>
-
-          {loading ? (
-            <ActivityIndicator size="large" color="#2F80ED" style={{ marginTop: 30 }} />
-          ) : reportes.length > 0 ? (
-            reportes.map((item, index) => (
+        {loading ? (
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing.xxl }} />
+        ) : reportes.length > 0 ? (
+          reportes.map((item, index) => {
+            const estadoConfig = ESTADO_COLORS[item.estado] || ESTADO_COLORS.abierto;
+            return (
               <View key={item.id || index} style={styles.reportCard}>
                 <View style={styles.reportHeader}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.reportTitle}>Incidencia reportada</Text>
-
-                    <Text style={styles.reportDate}>
-                      {formatearFecha(item.fecha_reporte)}
-                    </Text>
+                    <Text style={styles.reportCodigo}>{item.codigo || `TK-${String(index + 1).padStart(3, '0')}`}</Text>
+                    <Text style={styles.reportDate}>{formatearFecha(item.fecha_reporte)}</Text>
                   </View>
-
-                  <View style={styles.statusBadge}>
-                    <Text style={styles.statusText}>
-                      {item.estado || 'abierto'}
+                  <View style={[styles.statusBadge, { backgroundColor: estadoConfig.bg }]}>
+                    <Text style={[styles.statusText, { color: estadoConfig.text }]}>
+                      {(item.estado || 'abierto').replace('_', ' ')}
                     </Text>
                   </View>
                 </View>
 
-                <Text style={styles.reportDescription}>
-                  {item.descripcion || 'Sin descripción registrada.'}
-                </Text>
+                <Text style={styles.reportDescription}>{item.descripcion || 'Sin descripción registrada.'}</Text>
 
                 <View style={styles.reportFooter}>
-                  <Text style={styles.priorityText}>
-                    Gravedad: {item.gravedad || 'No definida'}
-                  </Text>
-
-                  <Text style={styles.priorityText}>
-                    Espacio ID: {item.espacio_id || 'No registrado'}
-                  </Text>
+                  <Text style={styles.footerText}>Gravedad: <Text style={styles.footerValue}>{item.gravedad || 'No definida'}</Text></Text>
+                  <Text style={styles.footerText}>Espacio: <Text style={styles.footerValue}>{item.espacio_nombre || item.espacio_id || '—'}</Text></Text>
                 </View>
               </View>
-            ))
-          ) : (
-            <View style={styles.emptyCard}>
-              <Ionicons name="document-outline" size={36} color="#BDBDBD" />
-              <Text style={styles.emptyText}>
-                Todavía no hay reportes registrados.
-              </Text>
-            </View>
-          )}
-        </ScrollView>
-
-        <View style={styles.bottomTab}>
-          <TouchableOpacity style={styles.tabItem} onPress={onBack}>
-            <Ionicons name="business-outline" size={22} color="#828282" />
-            <Text style={styles.tabLabel}>Mi Aula</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabItem}>
-            <Ionicons name="document-text" size={22} color="#2F80ED" />
-            <Text style={[styles.tabLabel, styles.tabLabelActive]}>Reportes</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabItem}>
-            <Ionicons name="chatbox-ellipses-outline" size={22} color="#828282" />
-            <Text style={styles.tabLabel}>Asistente IA</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+            );
+          })
+        ) : (
+          <View style={styles.emptyCard}>
+            <Ionicons name="document-outline" size={36} color={colors.textMuted} />
+            <Text style={styles.emptyText}>Todavía no hay reportes registrados.</Text>
+          </View>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  page: {
+  screen: {
     flex: 1,
-    backgroundColor: '#111111',
+    backgroundColor: colors.white,
+  },
+  header: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-
-  appShell: {
-    flex: 1,
-    width: '100%',
-    maxWidth: 430,
-    backgroundColor: '#F9FAFC',
-  },
-
-  navbar: {
-    height: 62,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.white,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    borderBottomColor: colors.border,
   },
-
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
   backBtn: {
-    marginRight: 10,
+    padding: spacing.xs,
+    marginRight: spacing.sm,
   },
-
-  logoContainer: {
-    backgroundColor: '#2F80ED',
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-
-  brandText: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#111827',
-  },
-
-  iconBtn: {
-    padding: 6,
-  },
-
-  scrollContent: {
+  headerTitle: {
     flex: 1,
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.bold,
+    color: colors.textPrimary,
   },
-
+  iconBtn: {
+    padding: spacing.xs,
+  },
+  scroll: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   scrollInner: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 30,
+    padding: spacing.lg,
+    paddingBottom: spacing.xxl,
   },
-
-  mainTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#111827',
-    marginBottom: 18,
-  },
-
   reportCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    backgroundColor: colors.white,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 14,
-    marginBottom: 12,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
   },
-
   reportHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 10,
+    marginBottom: spacing.sm,
   },
-
-  reportTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#111827',
+  reportCodigo: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.textPrimary,
   },
-
   reportDate: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 3,
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
-
   statusBadge: {
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.full,
   },
-
   statusText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#374151',
+    fontSize: 11,
+    fontWeight: typography.weight.bold,
     textTransform: 'capitalize',
   },
-
   reportDescription: {
-    fontSize: 13,
-    color: '#4B5563',
-    lineHeight: 19,
-    marginBottom: 10,
+    fontSize: typography.size.sm,
+    color: colors.textPrimary,
+    lineHeight: 20,
+    marginBottom: spacing.sm,
   },
-
   reportFooter: {
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    paddingTop: 8,
+    borderTopColor: colors.border,
+    paddingTop: spacing.sm,
+    gap: 2,
   },
-
-  priorityText: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontWeight: '600',
-    marginBottom: 2,
+  footerText: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
   },
-
+  footerValue: {
+    fontWeight: typography.weight.bold,
+    color: colors.textPrimary,
+  },
   emptyCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 24,
+    borderColor: colors.border,
+    padding: spacing.xl,
     alignItems: 'center',
+    marginTop: spacing.lg,
   },
-
   emptyText: {
-    fontSize: 13,
-    color: '#828282',
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginTop: 10,
-  },
-
-  bottomTab: {
-    height: 62,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingBottom: 4,
-  },
-
-  tabItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 80,
-  },
-
-  tabLabel: {
-    fontSize: 11,
-    color: '#828282',
-    marginTop: 4,
-  },
-
-  tabLabelActive: {
-    color: '#2F80ED',
-    fontWeight: '700',
+    marginTop: spacing.sm,
   },
 });

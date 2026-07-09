@@ -5,7 +5,6 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
@@ -13,7 +12,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { colors } from '../../../../shared/theme/colors';
+import { typography } from '../../../../shared/theme/typography';
+import { spacing, radius } from '../../../../shared/theme/spacing';
 import {
   AudioModule,
   RecordingPresets,
@@ -368,562 +371,412 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes }) {
   };
 
   return (
-    <SafeAreaView style={styles.page}>
-      <View style={styles.appShell}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView style={styles.screen} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
 
-        <View style={styles.navbar}>
-          <View style={styles.brandRow}>
-            <TouchableOpacity style={styles.backBtn} onPress={onBack}>
-              <Ionicons name="arrow-back" size={22} color="#2F80ED" />
-            </TouchableOpacity>
-
-            <View style={styles.logoContainer}>
-              <Ionicons name="sparkles" size={18} color="#FFFFFF" />
-            </View>
-
-            <Text style={styles.brandText}>Asistente IA</Text>
+      {/* Cabecera con botón de regreso */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={onBack} accessibilityLabel="Volver">
+          <Ionicons name="arrow-back" size={22} color={colors.primary} />
+        </TouchableOpacity>
+        <View style={styles.headerBrand}>
+          <View style={styles.headerIcon}>
+            <Ionicons name="sparkles" size={16} color={colors.white} />
           </View>
+          <Text style={styles.headerTitle}>Asistente IA</Text>
+        </View>
+        <View style={styles.headerSpacer} />
+      </View>
 
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>Profesor</Text>
-          </View>
+      <KeyboardAvoidingView
+        style={styles.body}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.quickSection}>
+          <Text style={styles.quickTitle}>Preguntas rápidas</Text>
+          <FlatList
+            data={preguntasRapidas}
+            keyExtractor={(item) => item}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickList}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.quickChip}
+                onPress={() => enviarPreguntaRapida(item)}
+                disabled={enviando}
+              >
+                <Text style={styles.quickChipText}>{item}</Text>
+              </TouchableOpacity>
+            )}
+          />
         </View>
 
-        <KeyboardAvoidingView
-          style={styles.body}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <View style={styles.quickSection}>
-            <Text style={styles.quickTitle}>Preguntas rápidas</Text>
+        <FlatList
+          ref={flatListRef}
+          data={mensajes}
+          keyExtractor={(item) => item.id}
+          renderItem={renderMensaje}
+          ListFooterComponent={renderTyping}
+          contentContainerStyle={styles.messagesContent}
+          showsVerticalScrollIndicator={false}
+        />
 
-            <FlatList
-              data={preguntasRapidas}
-              keyExtractor={(item) => item}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.quickList}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.quickChip}
-                  onPress={() => enviarPreguntaRapida(item)}
-                  disabled={enviando}
-                >
-                  <Text style={styles.quickChipText}>{item}</Text>
-                </TouchableOpacity>
-              )}
-            />
+        {recorderState.isRecording && (
+          <View style={styles.recordingBar}>
+            <View style={styles.recordingDot} />
+            <Text style={styles.recordingText}>Grabando {formatearTiempo(segundosGrabando)} / 01:00</Text>
           </View>
+        )}
 
-          <FlatList
-            ref={flatListRef}
-            data={mensajes}
-            keyExtractor={(item) => item.id}
-            renderItem={renderMensaje}
-            ListFooterComponent={renderTyping}
-            contentContainerStyle={styles.messagesContent}
-            showsVerticalScrollIndicator={false}
+        {audioUri && !recorderState.isRecording && !enviando && (
+          <View style={styles.audioReadyBar}>
+            <Ionicons name="mic" size={18} color={colors.primary} />
+            <Text style={styles.audioReadyText}>Audio listo ({formatearTiempo(segundosGrabando)})</Text>
+            <TouchableOpacity onPress={enviarAudioManual}>
+              <Text style={styles.audioSendText}>Enviar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.audioCancelBtn} onPress={() => { setAudioUri(null); setSegundosGrabando(0); }}>
+              <Ionicons name="close" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <View style={styles.inputArea}>
+          <TouchableOpacity
+            style={[styles.micBtn, recorderState.isRecording && styles.micBtnRecording]}
+            onPress={recorderState.isRecording ? () => detenerGrabacion(false) : iniciarGrabacion}
+            disabled={enviando}
+          >
+            <Ionicons name={recorderState.isRecording ? 'stop' : 'mic-outline'} size={22} color={colors.white} />
+          </TouchableOpacity>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Escribe tu consulta..."
+            placeholderTextColor={colors.textMuted}
+            value={texto}
+            onChangeText={setTexto}
+            multiline
+            editable={!enviando && !recorderState.isRecording}
           />
 
-          {recorderState.isRecording && (
-            <View style={styles.recordingBar}>
-              <View style={styles.recordingDot} />
-              <Text style={styles.recordingText}>
-                Grabando {formatearTiempo(segundosGrabando)} / 01:00
-              </Text>
-            </View>
-          )}
-
-          {audioUri && !recorderState.isRecording && !enviando && (
-            <View style={styles.audioReadyBar}>
-              <Ionicons name="mic" size={18} color="#2F80ED" />
-
-              <Text style={styles.audioReadyText}>
-                Audio listo ({formatearTiempo(segundosGrabando)})
-              </Text>
-
-              <TouchableOpacity onPress={enviarAudioManual}>
-                <Text style={styles.audioSendText}>Enviar</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.audioCancelBtn}
-                onPress={() => {
-                  setAudioUri(null);
-                  setSegundosGrabando(0);
-                }}
-              >
-                <Ionicons name="close" size={18} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <View style={styles.inputArea}>
-            <TouchableOpacity
-              style={[
-                styles.micBtn,
-                recorderState.isRecording && styles.micBtnRecording,
-              ]}
-              onPress={
-                recorderState.isRecording
-                  ? () => detenerGrabacion(false)
-                  : iniciarGrabacion
-              }
-              disabled={enviando}
-            >
-              <Ionicons
-                name={recorderState.isRecording ? 'stop' : 'mic-outline'}
-                size={22}
-                color="#FFFFFF"
-              />
-            </TouchableOpacity>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Escribe tu consulta..."
-              placeholderTextColor="#9CA3AF"
-              value={texto}
-              onChangeText={setTexto}
-              multiline
-              editable={!enviando && !recorderState.isRecording}
-            />
-
-            <TouchableOpacity
-              style={[
-                styles.sendBtn,
-                (!texto.trim() || enviando) && styles.sendBtnDisabled,
-              ]}
-              onPress={enviarTexto}
-              disabled={!texto.trim() || enviando}
-            >
-              <Ionicons name="send" size={18} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-
-        <View style={styles.bottomTab}>
-          <TouchableOpacity style={styles.tabItem} onPress={onBack}>
-            <Ionicons name="business-outline" size={22} color="#828282" />
-            <Text style={styles.tabLabel}>Mi Aula</Text>
-          </TouchableOpacity>
-
           <TouchableOpacity
-            style={styles.tabItem}
-            onPress={onVerReportes}
-            disabled={!onVerReportes}
+            style={[styles.sendBtn, (!texto.trim() || enviando) && styles.sendBtnDisabled]}
+            onPress={enviarTexto}
+            disabled={!texto.trim() || enviando}
           >
-            <Ionicons name="document-text-outline" size={22} color="#828282" />
-            <Text style={styles.tabLabel}>Reportes</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabItem}>
-            <Ionicons name="chatbox-ellipses" size={22} color="#2F80ED" />
-            <Text style={[styles.tabLabel, styles.tabLabelActive]}>
-              Asistente IA
-            </Text>
+            <Ionicons name="send" size={18} color={colors.white} />
           </TouchableOpacity>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  page: {
+  screen: {
     flex: 1,
-    backgroundColor: '#111111',
+    backgroundColor: colors.white,
+  },
+  header: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-
-  appShell: {
-    flex: 1,
-    width: '100%',
-    maxWidth: 430,
-    backgroundColor: '#F9FAFC',
-  },
-
-  navbar: {
-    height: 62,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.white,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    borderBottomColor: colors.border,
   },
-
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexShrink: 1,
-  },
-
   backBtn: {
-    marginRight: 10,
+    padding: spacing.xs,
+    marginRight: spacing.sm,
   },
-
-  logoContainer: {
-    backgroundColor: '#2F80ED',
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    justifyContent: 'center',
+  headerBrand: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 8,
+    gap: spacing.sm,
   },
-
-  brandText: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#111827',
+  headerIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.sm,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-
-  roleBadge: {
-    backgroundColor: '#EAF2FF',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 8,
+  headerTitle: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.bold,
+    color: colors.textPrimary,
   },
-
-  roleText: {
-    fontSize: 11,
-    color: '#2F80ED',
-    fontWeight: '700',
+  headerSpacer: {
+    width: 30,
   },
-
   body: {
     flex: 1,
   },
-
   quickSection: {
-    backgroundColor: '#F9FAFC',
-    paddingTop: 14,
-    paddingBottom: 10,
+    backgroundColor: colors.background,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
-
   quickTitle: {
     fontSize: 11,
-    color: '#6B7280',
-    fontWeight: '800',
+    color: colors.textSecondary,
+    fontWeight: typography.weight.bold,
     textTransform: 'uppercase',
-    letterSpacing: 1.4,
-    marginBottom: 8,
-    paddingHorizontal: 18,
+    letterSpacing: 1.2,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.lg,
   },
-
   quickList: {
-    paddingHorizontal: 18,
+    paddingHorizontal: spacing.lg,
   },
-
   quickChip: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.white,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginRight: 8,
+    borderColor: colors.border,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginRight: spacing.sm,
     maxWidth: 260,
   },
-
   quickChipText: {
-    fontSize: 13,
-    color: '#111827',
-    fontWeight: '700',
+    fontSize: typography.size.sm,
+    color: colors.textPrimary,
+    fontWeight: typography.weight.bold,
   },
-
   messagesContent: {
-    paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 14,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
   },
-
   messageRow: {
     flexDirection: 'row',
-    marginBottom: 14,
+    marginBottom: spacing.md,
   },
-
   messageRowIA: {
     justifyContent: 'flex-start',
   },
-
   messageRowUser: {
     justifyContent: 'flex-end',
   },
-
   botAvatar: {
     width: 34,
     height: 34,
-    borderRadius: 10,
-    backgroundColor: '#2F80ED',
+    borderRadius: radius.sm,
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: spacing.sm,
     marginTop: 2,
   },
-
   messageBubble: {
     maxWidth: '78%',
     borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
-
   iaBubble: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.white,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
-
   userBubble: {
-    backgroundColor: '#2F80ED',
+    backgroundColor: colors.primary,
   },
-
   errorBubble: {
     borderColor: '#FCA5A5',
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerBg,
   },
-
   typingBubble: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-
   typingText: {
-    fontSize: 13,
-    color: '#6B7280',
-    fontWeight: '700',
-    marginLeft: 8,
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+    fontWeight: typography.weight.bold,
+    marginLeft: spacing.sm,
   },
-
   messageText: {
-    fontSize: 14,
+    fontSize: typography.size.sm,
     lineHeight: 20,
   },
-
   iaText: {
-    color: '#111827',
+    color: colors.textPrimary,
   },
-
   userText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
-
   resultCard: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
-    padding: 12,
-    marginTop: 10,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    marginTop: spacing.sm,
   },
-
   resultTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#111827',
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.textPrimary,
   },
-
   resultSub: {
-    fontSize: 12,
-    color: '#6B7280',
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
     marginTop: 3,
   },
-
   statusMiniBadge: {
     alignSelf: 'flex-start',
     backgroundColor: '#D1FAE5',
-    paddingHorizontal: 10,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 5,
-    borderRadius: 999,
-    marginTop: 8,
+    borderRadius: radius.full,
+    marginTop: spacing.sm,
   },
-
   statusMiniText: {
     fontSize: 11,
     color: '#047857',
-    fontWeight: '800',
+    fontWeight: typography.weight.bold,
   },
-
   recordingBar: {
-    marginHorizontal: 18,
-    marginBottom: 8,
-    backgroundColor: '#FEF2F2',
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.dangerBg,
     borderWidth: 1,
     borderColor: '#FCA5A5',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
   },
-
   recordingDot: {
     width: 9,
     height: 9,
-    borderRadius: 999,
-    backgroundColor: '#EF4444',
-    marginRight: 8,
+    borderRadius: radius.full,
+    backgroundColor: colors.danger,
+    marginRight: spacing.sm,
   },
-
   recordingText: {
-    fontSize: 13,
+    fontSize: typography.size.sm,
     color: '#991B1B',
-    fontWeight: '700',
+    fontWeight: typography.weight.bold,
   },
-
   audioReadyBar: {
-    marginHorizontal: 18,
-    marginBottom: 8,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
     backgroundColor: '#EFF6FF',
     borderWidth: 1,
     borderColor: '#BFDBFE',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
   },
-
   audioReadyText: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 13,
+    marginLeft: spacing.sm,
+    fontSize: typography.size.sm,
     color: '#1E3A8A',
-    fontWeight: '700',
+    fontWeight: typography.weight.bold,
   },
-
   audioSendText: {
-    fontSize: 13,
-    color: '#2F80ED',
-    fontWeight: '800',
+    fontSize: typography.size.sm,
+    color: colors.primary,
+    fontWeight: typography.weight.bold,
   },
-
   audioCancelBtn: {
-    marginLeft: 10,
+    marginLeft: spacing.sm,
   },
-
   inputArea: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.white,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderTopColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     flexDirection: 'row',
     alignItems: 'flex-end',
   },
-
   micBtn: {
     width: 42,
     height: 42,
-    borderRadius: 14,
-    backgroundColor: '#2F80ED',
+    borderRadius: radius.sm,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
-
   micBtnRecording: {
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.danger,
   },
-
   input: {
     flex: 1,
     minHeight: 42,
     maxHeight: 92,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#111827',
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    fontSize: typography.size.sm,
+    color: colors.textPrimary,
   },
-
   sendBtn: {
     width: 42,
     height: 42,
-    borderRadius: 14,
-    backgroundColor: '#2F80ED',
+    borderRadius: radius.sm,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 8,
+    marginLeft: spacing.sm,
   },
-
   sendBtnDisabled: {
     opacity: 0.45,
   },
-
-  bottomTab: {
-    height: 62,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingBottom: 4,
-  },
-
-  tabItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 80,
-  },
-
-  tabLabel: {
-    fontSize: 11,
-    color: '#828282',
-    marginTop: 4,
-  },
-
-  tabLabelActive: {
-    color: '#2F80ED',
-    fontWeight: '700',
-  },
   confirmActions: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 12,
+    gap: spacing.sm,
+    marginTop: spacing.sm,
   },
-
   confirmYesBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2F80ED',
-    borderRadius: 12,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
+    backgroundColor: colors.primary,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
-
   confirmYesText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800',
+    color: colors.white,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
     marginLeft: 5,
   },
-
   confirmNoBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerBg,
     borderWidth: 1,
     borderColor: '#FCA5A5',
-    borderRadius: 12,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
-
   confirmNoText: {
-    color: '#DC2626',
-    fontSize: 13,
-    fontWeight: '800',
+    color: colors.danger,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
     marginLeft: 5,
   },
 });
