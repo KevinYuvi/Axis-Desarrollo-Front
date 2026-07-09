@@ -3,7 +3,7 @@ import { useAuth } from '@clerk/clerk-expo';
 
 // 🔴 REEMPLAZA ESTO CON LA IPV4 DE TU COMPUTADORA
 // Ejemplo: 'http://192.168.1.15:8000/api/v1'
-const API_URL = 'http://192.168.1.8:8000/api/v1'; 
+const API_URL = 'http://10.184.19.177:8000/api/v1'; 
 
 export const useApi = () => {
   const { getToken } = useAuth();
