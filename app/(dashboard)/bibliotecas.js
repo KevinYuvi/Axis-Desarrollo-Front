@@ -1,17 +1,16 @@
 import { useRouter } from 'expo-router';
-import StudentHomeScreen from '../../src/modules/student/presentation/screens/StudentHomeScreen';
+import LibrariesScreen from '../../src/modules/student/presentation/screens/LibrariesScreen';
 
-// Mapea los nombres de tab del BottomTabBar legacy a rutas de expo-router
 const TAB_ROUTES = {
   home: '/(dashboard)',
   libraries: '/(dashboard)/bibliotecas',
   assistant: '/(dashboard)/asistente',
 };
 
-export default function StudentHomeRoute() {
+export default function LibrariesRoute() {
   const router = useRouter();
   return (
-    <StudentHomeScreen
+    <LibrariesScreen
       onNavigate={(tab) => router.push(TAB_ROUTES[tab] ?? '/(dashboard)')}
       onNavigateToCamera={(spaceId) =>
         router.push({ pathname: '/(dashboard)/camara', params: { spaceId } })
