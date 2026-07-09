@@ -1,16 +1,16 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../theme/colors';
-import { typography } from '../theme/typography';
-import { spacing, radius } from '../theme/spacing';
+import { colors } from '../../theme/colors';
+import { typography } from '../../theme/typography';
+import { spacing, radius } from '../../theme/spacing';
 
 export default function AppHeader() {
   return (
     <View style={styles.header}>
       <View style={styles.headerLeft}>
         <Image 
-          source={require('../../../assets/axis_la_central_conectada_icon.png')} 
+          source={require('../../../../assets/axis_la_central_conectada_icon.png')} 
           style={styles.headerLogo} 
           resizeMode="contain" 
         />

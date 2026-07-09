@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors } from '../theme/colors';
-import { typography } from '../theme/typography';
-import { spacing } from '../theme/spacing';
+import { colors } from '../../theme/colors';
+import { typography } from '../../theme/typography';
+import { spacing } from '../../theme/spacing';
 
 export default function BottomTabBar({ activeTab, onTabPress }) {
   return (

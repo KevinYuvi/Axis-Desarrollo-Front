@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../theme/colors';
-import { typography } from '../theme/typography';
-import { spacing, radius } from '../theme/spacing';
-import Button from './Button';
+import { colors } from '../../theme/colors';
+import { typography } from '../../theme/typography';
+import { spacing, radius } from '../../theme/spacing';
+import Button from '../atoms/Button';
 
 export default function SpaceListCard({ space, onPressDetail }) {
   let statusColor = colors.primary;

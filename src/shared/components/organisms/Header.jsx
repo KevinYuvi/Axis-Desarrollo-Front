@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet } from 'react-native';
-import { colors } from '../theme/colors';
-import { typography } from '../theme/typography';
-import { spacing } from '../theme/spacing';
+import { colors } from '../../theme/colors';
+import { typography } from '../../theme/typography';
+import { spacing } from '../../theme/spacing';
 
 export default function Header({ title, subtitle }) {
   return (

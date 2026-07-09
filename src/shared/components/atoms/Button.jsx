@@ -1,7 +1,7 @@
 import { Pressable, Text, StyleSheet } from 'react-native';
-import { colors } from '../theme/colors';
-import { typography } from '../theme/typography';
-import { spacing, radius } from '../theme/spacing';
+import { colors } from '../../theme/colors';
+import { typography } from '../../theme/typography';
+import { spacing, radius } from '../../theme/spacing';
 
 export default function Button({ title, onPress, variant = 'primary', disabled = false }) {
   const isSecondary = variant === 'secondary';

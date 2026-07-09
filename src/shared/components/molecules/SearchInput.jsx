@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, TextInput, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors } from '../theme/colors';
-import { typography } from '../theme/typography';
-import { spacing, radius } from '../theme/spacing';
+import { colors } from '../../theme/colors';
+import { typography } from '../../theme/typography';
+import { spacing, radius } from '../../theme/spacing';
 
 export default function SearchInput({ value, onChangeText, placeholder }) {
   return (
