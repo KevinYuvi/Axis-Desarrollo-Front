@@ -1,9 +1,10 @@
 import { StyleSheet } from 'react-native';
+import { colors } from './colors';
 
 export const authStyles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: colors.background,
     paddingHorizontal: 24,
     justifyContent: 'center',
   },
@@ -12,7 +13,7 @@ export const authStyles = StyleSheet.create({
     marginBottom: 40,
   },
   logoBox: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
     width: 72,
     height: 72,
     borderRadius: 20,
@@ -23,18 +24,18 @@ export const authStyles = StyleSheet.create({
   titleText: {
     fontSize: 28,
     fontWeight: '900',
-    color: '#111827',
+    color: colors.textPrimary,
     marginBottom: 8,
   },
   subtitleText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   headerText: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
     marginBottom: 24,
     marginTop: 10,
   },
@@ -44,38 +45,38 @@ export const authStyles = StyleSheet.create({
   inputLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.border,
+    backgroundColor: colors.white,
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderRadius: 12,
     fontSize: 14,
-    color: '#111827',
+    color: colors.textPrimary,
   },
   inputError: {
-    borderColor: '#EF4444', // Borde rojo si hay error
-    backgroundColor: '#FEF2F2', // Fondo ligeramente rojizo
+    borderColor: colors.danger, // Borde rojo si hay error
+    backgroundColor: colors.dangerBg, // Fondo ligeramente rojizo
   },
   errorText: {
-    color: '#EF4444',
+    color: colors.danger,
     fontSize: 12,
     marginTop: 6,
     fontWeight: '500',
   },
   generalErrorBox: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerBg,
     padding: 12,
     borderRadius: 8,
     marginBottom: 20,
     borderLeftWidth: 4,
-    borderLeftColor: '#EF4444',
+    borderLeftColor: colors.danger,
   },
   forgotPasswordContainer: {
     alignItems: 'flex-end',
@@ -83,22 +84,22 @@ export const authStyles = StyleSheet.create({
   },
   forgotPasswordText: {
     fontSize: 12,
-    color: '#3B82F6',
+    color: colors.primary,
     fontWeight: '500',
   },
   primaryButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#3B82F6',
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
   },
   primaryButtonText: {
-    color: '#FFFFFF',
+    color: colors.white,
     fontWeight: '700',
     fontSize: 15,
   },
@@ -108,7 +109,7 @@ export const authStyles = StyleSheet.create({
   },
   footerText: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: colors.textMuted,
   },
   switchFlowContainer: {
     marginTop: 32,
@@ -116,10 +117,10 @@ export const authStyles = StyleSheet.create({
   },
   switchFlowText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   switchFlowLink: {
-    color: '#3B82F6',
+    color: colors.primary,
     fontWeight: '700',
   },
 });

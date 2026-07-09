@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'reac
 import { useSignIn } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { authStyles as styles } from '../../src/theme/authStyles';
+import { authStyles as styles } from '../../src/shared/theme/authStyles';
 
 export default function LoginScreen() {
   const { signIn, setActive, isLoaded } = useSignIn();
