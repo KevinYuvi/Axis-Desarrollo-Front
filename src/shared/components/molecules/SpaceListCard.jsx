@@ -1,12 +1,14 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
 import Button from '../atoms/Button';
 
 export default function SpaceListCard({ space, onPressDetail }) {
+  const router = useRouter();
   let statusColor = colors.primary;
   if (space.status === 'Disponible') statusColor = colors.available;
   else if (space.status === 'Próximo') statusColor = colors.warning;
@@ -51,6 +53,12 @@ export default function SpaceListCard({ space, onPressDetail }) {
 
       <View style={styles.buttonContainer}>
         <Button title="Ver detalle" onPress={() => onPressDetail(space)} />
+        <View style={{ height: spacing.xs }} />
+        <Button
+          title="Cómo llegar"
+          variant="secondary"
+          onPress={() => router.push(`/ruta/${space.id}`)}
+        />
       </View>
     </View>
   );

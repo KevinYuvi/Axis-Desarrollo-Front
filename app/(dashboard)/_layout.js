@@ -137,6 +137,10 @@ export default function DashboardLayout() {
           name="camara"
           options={{ href: null, title: 'Cámara en vivo' }}
         />
+        <Tabs.Screen
+          name="ruta/[espacioId]"
+          options={{ href: null, title: 'Cómo llegar' }}
+        />
       </Tabs>
     </OccupancyProvider>
   );
