@@ -1,14 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform, Alert } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
-import MapViewDirections from 'react-native-maps-directions';
+
+// FASE 1 y 2: Eliminado PROVIDER_GOOGLE y MapViewDirections. Conservamos MapView, Marker y agregamos UrlTile.
+import MapView, { Marker, UrlTile } from 'react-native-maps'; 
+
+// FASE 4: expo-location intacto
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
-import { useRouter } from 'expo-router'; // Volvemos al enrutador manual
+import { useRouter } from 'expo-router';
 
-const GOOGLE_MAPS_APIKEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_APIKEY;
-
+// FASE 5: Coordenadas intactas
 const FACULTADES_REGION = {
   general: { latitude: -0.1995, longitude: -78.5028, latitudeDelta: 0.007, longitudeDelta: 0.007 },
   ingenieria: { latitude: -0.1976, longitude: -78.5015, latitudeDelta: 0.002, longitudeDelta: 0.002 },
@@ -31,27 +33,23 @@ const EDIFICIOS_UCE = [
   }
 ];
 
-const cleanMapStyle = [
-  { "featureType": "poi", "stylers": [{ "visibility": "off" }] },
-  { "featureType": "transit", "stylers": [{ "visibility": "off" }] }
-];
-
 export default function CampusMap() {
   const mapRef = useRef(null);
-  const router = useRouter(); // Instanciamos el router
+  const router = useRouter(); 
   const { user, isLoaded } = useUser();
   
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('Todos');
-  
   const [userLocation, setUserLocation] = useState(null);
-  const [routeDestination, setRouteDestination] = useState(null);
 
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
+      if (status !== 'granted') {
+        Alert.alert('Permiso denegado', 'Necesitamos tu ubicación para mostrarte en el campus.');
+        return;
+      }
       let location = await Location.getCurrentPositionAsync({});
       setUserLocation({
         latitude: location.coords.latitude,
@@ -61,7 +59,7 @@ export default function CampusMap() {
   }, []);
 
   useEffect(() => {
-    if (isLoaded && user && mapRef.current && !routeDestination) {
+    if (isLoaded && user && mapRef.current) {
       const userFacultad = user.publicMetadata?.facultad?.toLowerCase() || 'general';
       const regionDestino = FACULTADES_REGION[userFacultad] || FACULTADES_REGION.general;
       setTimeout(() => mapRef.current.animateToRegion(regionDestino, 1500), 500);
@@ -76,38 +74,15 @@ export default function CampusMap() {
     return coincideFiltro && coincideBusqueda;
   });
 
-  const trazarRuta = () => {
-    if (!userLocation) {
-      Alert.alert("Buscando GPS...", "Aún estamos obteniendo tu ubicación, intenta en un segundo.");
-      return;
-    }
-    setRouteDestination(selectedBuilding.coordinate);
-  };
-
-  // =====================================================================
-  // FUNCIÓN DE DEPURACIÓN (LOGS ACTIVADOS)
-  // =====================================================================
+  // El botón "Info de aulas" sigue funcionando hacia la Fase 8 (SVGs intactos)
   const intentarNavegar = () => {
-    console.log("\n==============================================");
-    console.log("🔴 1. SE PRESIONÓ EL BOTÓN INFO DE AULAS");
-    
-    if (!selectedBuilding) {
-      console.log("❌ ERROR: selectedBuilding es NULL o UNDEFINED");
-      return;
-    }
-    
-    console.log("🟢 2. ID DEL EDIFICIO CAPTURADO:", selectedBuilding.id);
+    if (!selectedBuilding) return;
     const rutaDestino = `/(dashboard)/edificio/${selectedBuilding.id}`;
-    console.log("🔵 3. RUTA GENERADA EXACTA:", rutaDestino);
-
     try {
-      console.log("⏳ 4. EJECUTANDO router.push()...");
       router.push(rutaDestino);
-      console.log("✅ 5. COMANDO DE NAVEGACIÓN ENVIADO CON ÉXITO");
     } catch (error) {
-      console.log("💥 ERROR CRÍTICO AL NAVEGAR:", error);
+      console.log("Error al navegar:", error);
     }
-    console.log("==============================================\n");
   };
 
   const FilterChip = ({ label }) => {
@@ -115,7 +90,7 @@ export default function CampusMap() {
     return (
       <TouchableOpacity 
         style={[styles.chip, isActive && styles.chipActive]} 
-        onPress={() => { setActiveFilter(label); setSelectedBuilding(null); setRouteDestination(null); }}
+        onPress={() => { setActiveFilter(label); setSelectedBuilding(null); }}
       >
         <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{label}</Text>
       </TouchableOpacity>
@@ -124,31 +99,25 @@ export default function CampusMap() {
 
   return (
     <View style={styles.container}>
+      {/* Eliminado PROVIDER_GOOGLE. El mapa nativo actuará como un lienzo vacío */}
       <MapView
         ref={mapRef}
-        provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={FACULTADES_REGION.general}
-        customMapStyle={cleanMapStyle}
         showsUserLocation={true}
         showsMyLocationButton={false}
-        onPress={() => { setSelectedBuilding(null); setRouteDestination(null); }}
+        mapType="none" // Apaga el renderizado nativo base
+        onPress={() => setSelectedBuilding(null)}
       >
-        {routeDestination && userLocation && (
-          <MapViewDirections
-            origin={userLocation}
-            destination={routeDestination}
-            apikey={GOOGLE_MAPS_APIKEY}
-            strokeWidth={4}
-            strokeColor="#3B82F6"
-            onReady={result => {
-              mapRef.current.fitToCoordinates(result.coordinates, {
-                edgePadding: { right: 50, bottom: 350, left: 50, top: 150 },
-              });
-            }}
-          />
-        )}
+        
+        {/* FASE 3: Inyección de OpenStreetMap mediante UrlTile */}
+        <UrlTile
+          urlTemplate="https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
+          maximumZ={19}
+          zIndex={-1} 
+        />
 
+        {/* FASE 5: Los Markers siguen exactamente igual */}
         {edificiosFiltrados.map((edificio) => (
           <Marker
             key={edificio.id}
@@ -156,10 +125,10 @@ export default function CampusMap() {
             title={edificio.title}
             description={edificio.description}
             pinColor={selectedBuilding?.id === edificio.id ? 'red' : 'blue'}
+            zIndex={3}
             onPress={(e) => {
               e.stopPropagation();
               setSelectedBuilding(edificio);
-              setRouteDestination(null);
               mapRef.current.animateToRegion({
                 ...edificio.coordinate,
                 latitude: edificio.coordinate.latitude - 0.0005,
@@ -200,12 +169,12 @@ export default function CampusMap() {
           </View>
 
           <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.secondaryButton} onPress={trazarRuta}>
+            {/* El botón de ruta está listo para que le conectemos OSRM en la Fase 6 */}
+            <TouchableOpacity style={styles.secondaryButton} onPress={() => Alert.alert("Fase 6 Pendiente", "Aquí conectaremos el fetch a OSRM")}>
               <Ionicons name="navigate-outline" size={18} color="#3B82F6" />
-              <Text style={styles.secondaryButtonText}>Ruta</Text>
+              <Text style={styles.secondaryButtonText}>Ruta para llegar</Text>
             </TouchableOpacity>
 
-            {/* BOTÓN CON LA FUNCIÓN DE LOGS CONECTADA */}
             <TouchableOpacity 
               style={styles.primaryButton} 
               activeOpacity={0.7} 
@@ -224,7 +193,6 @@ export default function CampusMap() {
 const styles = StyleSheet.create({
   container: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', alignItems: 'center' },
   map: { ...StyleSheet.absoluteFillObject },
-  
   topUIContainer: { position: 'absolute', top: Platform.OS === 'ios' ? 50 : 30, width: '100%', paddingHorizontal: 16 },
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, paddingHorizontal: 16, height: 50, elevation: 5 },
   searchInput: { flex: 1, marginLeft: 10, fontSize: 15, color: '#111827' },
@@ -233,7 +201,6 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: '#EFF6FF', borderColor: '#3B82F6' },
   chipText: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
   chipTextActive: { color: '#1D4ED8' },
-
   bottomSheet: { position: 'absolute', bottom: 24, backgroundColor: '#FFFFFF', width: '92%', padding: 18, borderRadius: 16, elevation: 10, zIndex: 100 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   iconBox: { backgroundColor: '#EFF6FF', padding: 12, borderRadius: 12, marginRight: 12 },

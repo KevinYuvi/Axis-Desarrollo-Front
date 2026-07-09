@@ -1,0 +1,77 @@
+Listado de rutas de carpetas
+El número de serie del volumen es 00000071 B04B:3757
+C:.
+¦   .env
+¦   .env.example
+¦   .gitignore
+¦   AGENTS.md
+¦   app.config.js
+¦   CODEOWNERS
+¦   del
+¦   estructura.txt
+¦   index.js
+¦   package-lock.json
+¦   package.json
+¦   README.md
+¦   rmdir
+¦   
++---.expo
+¦   ¦   devices.json
+¦   ¦   README.md
+¦   ¦   
+¦   +---web
+¦       +---cache
+¦           +---production
+¦               +---images
+¦                   +---favicon
+¦                       +---favicon-24272cdaeff82cc5facdaccd982a6f05b60c4504704bbf94c19a6388659880bb-contain-transparent
+¦                               favicon-48.png
+¦                               
++---app
+¦   ¦   index.js
+¦   ¦   _layout.js
+¦   ¦   
+¦   +---(auth)
+¦   ¦       login.js
+¦   ¦       register.js
+¦   ¦       
+¦   +---(dashboard)
+¦       ¦   admin.js
+¦       ¦   asistente.js
+¦       ¦   index.js
+¦       ¦   perfil.js
+¦       ¦   reportes.js
+¦       ¦   reservas.js
+¦       ¦   _layout.js
+¦       ¦   
+¦       +---edificio
+¦               [id].js
+¦               
++---assets
+¦   ¦   adaptive-icon.png
+¦   ¦   favicon.png
+¦   ¦   icon.png
+¦   ¦   splash-icon.png
+¦   ¦   
+¦   +---images
++---node_modules
++---src
+¦   +---components
+¦   ¦   +---Map
+¦   ¦   ¦       CampusMap.native.js
+¦   ¦   ¦       CampusMap.web.js
+¦   ¦   ¦       
+¦   ¦   +---Planos
+¦   ¦   ¦       Piso01.js
+¦   ¦   ¦       Piso02.js
+¦   ¦   ¦       
+¦   ¦   +---SVG
+¦   ¦           piso01.txt
+¦   ¦           piso02.txt
+¦   ¦           
+¦   +---theme
+¦           authStyles.js
+¦           
++---utils
+        tokenCache.js
+        
