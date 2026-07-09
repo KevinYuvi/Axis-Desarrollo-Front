@@ -43,14 +43,14 @@ function getStatusColor(status) {
  * @returns {string} URL lista para usar como source de un <Image>
  */
 function getAnnotatedFrameUrl(spaceId, updatedAt) {
-  return `${API_BASE_URL}/occupancy/spaces/${spaceId}/frame?t=${encodeURIComponent(updatedAt)}`;
+  return `${API_BASE_URL}/ocupacion/spaces/${spaceId}/frame?t=${encodeURIComponent(updatedAt)}`;
 }
 
 /**
  * Pantalla de cámara en vivo: muestra el stream MJPEG real de la cámara IP
  * (cuando el espacio la tiene conectada) junto con el estado de ocupación y
  * la recomendación de visita, reutilizando los datos ya cargados por
- * useOccupancy() (mismo polling de 30s de siempre, sin pedidos nuevos).
+ * useOccupancy() (mismo polling de 10s de siempre, sin pedidos nuevos).
  * @param {Object} props
  * @param {string} props.spaceId - Id del espacio a mostrar
  * @param {Function} props.onNavigate - Callback para cambiar de pantalla
@@ -104,7 +104,7 @@ export default function CameraTrackingScreen({ spaceId, onNavigate }) {
 
         {isLive && (
           <Card style={styles.cameraCard}>
-            <Text style={styles.frameSectionTitle}>Último análisis con IA (cada 30 s)</Text>
+            <Text style={styles.frameSectionTitle}>Último análisis con IA (cada 10 s)</Text>
             {annotatedFrameUrl && !frameFailed ? (
               <>
                 <Image
@@ -122,7 +122,7 @@ export default function CameraTrackingScreen({ spaceId, onNavigate }) {
               </>
             ) : (
               <Text style={styles.noCameraText}>
-                Todavía no hay un análisis con IA disponible para esta cámara (puede tardar hasta 30 segundos desde
+                Todavía no hay un análisis con IA disponible para esta cámara (puede tardar hasta 10 segundos desde
                 que se enciende el vision-service).
               </Text>
             )}
