@@ -1,5 +1,5 @@
 import { View, ActivityIndicator } from 'react-native';
-import { useUser } from '@clerk/clerk-expo';
+import { useUser } from '../src/shared/hooks/useClerkOrMock';
 import { Redirect } from 'expo-router';
 
 export default function StartPage() {
@@ -12,11 +12,10 @@ export default function StartPage() {
       </View>
     );
   }
-  if (!isSignedIn) return <Redirect href="/(auth)/login" />;
+  if (!isSignedIn) return <Redirect href="/(auth)/splash" />;
 
   const rol = user?.publicMetadata?.rol?.toLowerCase() ?? 'estudiante';
-  if (rol === 'docente') return <Redirect href="/(dashboard)/docente" />;
   if (rol === 'admin') return <Redirect href="/(dashboard)/admin" />;
-  // estudiante y ayudante entran al home general
+  // estudiante, docente y ayudante entran al index del dashboard
   return <Redirect href="/(dashboard)" />;
 }

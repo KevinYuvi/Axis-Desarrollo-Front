@@ -11,7 +11,7 @@ import { colors } from '../../../../shared/theme/colors';
 const GOOGLE_MAPS_APIKEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_APIKEY;
 
 export default function RouteToSpaceScreen() {
-  const { espacioId } = useLocalSearchParams();
+  const { espacioId, lat, lng, nombre } = useLocalSearchParams();
   const { getToken } = useAuth();
   const [origen, setOrigen] = useState(null);
   const [destino, setDestino] = useState(null);
@@ -27,6 +27,17 @@ export default function RouteToSpaceScreen() {
       const pos = await Location.getCurrentPositionAsync({});
       setOrigen({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
 
+      // Si nos pasan lat y lng por paramétros (caso mocks de bibliotecas)
+      if (lat && lng && nombre) {
+        setDestino({
+          latitude: parseFloat(lat),
+          longitude: parseFloat(lng),
+          nombre: nombre,
+        });
+        return;
+      }
+
+      // Si no hay params directos, buscamos en la base de datos
       const token = await getToken();
       const res = await fetch(`${API_V1}/espacios/${espacioId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -40,14 +51,14 @@ export default function RouteToSpaceScreen() {
         setError(`"${espacio.nombre}" no tiene coordenadas registradas`);
         return;
       }
-      const [lat, lng] = espacio.coordenadas_gps.split(',').map(Number);
-      if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      const [dbLat, dbLng] = espacio.coordenadas_gps.split(',').map(Number);
+      if (Number.isNaN(dbLat) || Number.isNaN(dbLng)) {
         setError(`Las coordenadas de "${espacio.nombre}" no son válidas`);
         return;
       }
-      setDestino({ latitude: lat, longitude: lng, nombre: espacio.nombre });
+      setDestino({ latitude: dbLat, longitude: dbLng, nombre: espacio.nombre });
     })().catch(() => setError('Error obteniendo la ruta'));
-  }, [espacioId]);
+  }, [espacioId, lat, lng, nombre]);
 
   if (error) {
     return (

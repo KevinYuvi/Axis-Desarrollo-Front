@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Slot, useRouter, useSegments } from 'expo-router';
-import { ClerkProvider, useAuth, useUser } from '@clerk/clerk-expo';
-import { Text, View } from 'react-native';
+import { ClerkProvider } from '@clerk/clerk-expo';
+import { useAuth, useUser, initMockSession } from '../src/shared/hooks/useClerkOrMock';
+import { Text, View, ActivityIndicator } from 'react-native';
 import { tokenCache } from '../utils/tokenCache';
 
 const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
@@ -21,19 +22,16 @@ const InitialLayout = () => {
     const inAuthGroup = segments[0] === '(auth)';
 
     if (isSignedIn && !inDashboardGroup) {
-      // Con sesión activa, cada rol entra a su pantalla inicial
+      // Con sesión activa, el admin va a su panel, el resto al index que es un enrutador inteligente
       const rol = user?.publicMetadata?.rol?.toLowerCase() ?? 'estudiante';
-      if (rol === 'docente') {
-        router.replace('/(dashboard)/docente');
-      } else if (rol === 'admin') {
+      if (rol === 'admin') {
         router.replace('/(dashboard)/admin');
       } else {
-        // estudiante y ayudante entran al home general
         router.replace('/(dashboard)');
       }
     } else if (!isSignedIn && !inAuthGroup) {
-      // Si NO tiene sesión y NO está en el login/registro, lo mandamos al login obligatoriamente
-      router.replace('/(auth)/login');
+      // Si NO tiene sesión y NO está en el login/registro, lo mandamos al splash de selección de rol
+      router.replace('/(auth)/splash');
     }
   }, [isSignedIn, isLoaded, segments, user]);
 
@@ -41,6 +39,20 @@ const InitialLayout = () => {
 };
 
 export default function RootLayout() {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    initMockSession().then(() => setReady(true));
+  }, []);
+
+  if (!ready) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FAFAFA' }}>
+        <ActivityIndicator size="large" color="#3B82F6" />
+      </View>
+    );
+  }
+
   if (!CLERK_PUBLISHABLE_KEY) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FAFAFA' }}>

@@ -13,6 +13,8 @@ const ROL_CONFIG = {
   admin:      { label: 'Admin',     bg: '#FDF4FF', text: '#9333EA' },
 };
 
+import { useRouter } from 'expo-router';
+
 /**
  * AppHeader — Cabecera única de la aplicación.
  * Props:
@@ -23,6 +25,15 @@ const ROL_CONFIG = {
 export default function AppHeader({ rol = 'estudiante', onNotifPress, onUserPress }) {
   const normalizedRol = (rol || 'estudiante').toLowerCase();
   const config = ROL_CONFIG[normalizedRol] || ROL_CONFIG.estudiante;
+  const router = useRouter();
+
+  const handleUserPress = () => {
+    if (onUserPress) {
+      onUserPress();
+    } else {
+      router.push('/(dashboard)/perfil');
+    }
+  };
 
   return (
     <View style={styles.header}>
@@ -51,7 +62,7 @@ export default function AppHeader({ rol = 'estudiante', onNotifPress, onUserPres
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.iconButton}
-          onPress={onUserPress}
+          onPress={handleUserPress}
           accessibilityLabel="Mi perfil"
         >
           <Ionicons name="person-circle-outline" size={24} color={colors.textSecondary} />

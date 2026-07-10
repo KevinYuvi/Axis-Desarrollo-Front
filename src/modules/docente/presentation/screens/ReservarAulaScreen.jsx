@@ -4,15 +4,18 @@ import {
   Text,
   View,
   TouchableOpacity,
-  SafeAreaView,
+  FlatList,
   StatusBar,
   ActivityIndicator,
   Alert,
   ScrollView,
   Modal,
-  FlatList,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { colors } from '../../../../shared/theme/colors';
+import { typography } from '../../../../shared/theme/typography';
+import { spacing, radius } from '../../../../shared/theme/spacing';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -40,24 +43,14 @@ export default function ReservarAulaScreen({ token, onBack }) {
   const cargarEspacios = async () => {
     try {
       setLoadingEspacios(true);
-
       const response = await fetch(`${API_URL}/api/v1/espacios/`, {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
       });
-
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data?.detail || 'No se pudieron cargar las aulas.');
-      }
-
+      if (!response.ok) throw new Error(data?.detail || 'No se pudieron cargar las aulas.');
       setEspacios(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error('Error cargando espacios:', error);
       Alert.alert('Error', error.message || 'No se pudieron cargar las aulas.');
     } finally {
       setLoadingEspacios(false);
@@ -66,87 +59,54 @@ export default function ReservarAulaScreen({ token, onBack }) {
 
   const generarFechas = () => {
     const fechas = [];
-
-    for (let i = 0; i < 15; i++) {
-      const fecha = new Date();
-      fecha.setDate(fecha.getDate() + i);
-
-      const year = fecha.getFullYear();
-      const month = `${fecha.getMonth() + 1}`.padStart(2, '0');
-      const day = `${fecha.getDate()}`.padStart(2, '0');
-
-      const valor = `${year}-${month}-${day}`;
-
-      fechas.push({
-        valor,
-        label:
-          i === 0
-            ? `Hoy · ${valor}`
-            : i === 1
-            ? `Mañana · ${valor}`
-            : valor,
-      });
+    const hoy = new Date();
+    for (let i = 0; i < 7; i++) {
+      const f = new Date(hoy);
+      f.setDate(f.getDate() + i);
+      fechas.push(f.toISOString().split('T')[0]);
     }
-
     return fechas;
   };
 
   const generarHoras = () => {
     const horas = [];
-
-    for (let h = 7; h <= 22; h++) {
-      horas.push(`${String(h).padStart(2, '0')}:00`);
-      horas.push(`${String(h).padStart(2, '0')}:30`);
+    for (let h = 7; h <= 20; h++) {
+      const hrStr = h.toString().padStart(2, '0');
+      horas.push(`${hrStr}:00`);
+      horas.push(`${hrStr}:30`);
     }
-
     return horas;
   };
 
   const crearReserva = async () => {
-    if (!espacioSeleccionado?.id) {
-      Alert.alert('Campo requerido', 'Selecciona el aula que deseas reservar.');
-      return;
-    }
-
-    if (!fechaSeleccionada) {
-      Alert.alert('Campo requerido', 'Selecciona la fecha de la reserva.');
-      return;
-    }
-
-    if (!horaInicio || !horaFin) {
-      Alert.alert('Campo requerido', 'Selecciona la hora de inicio y la hora de fin.');
-      return;
-    }
-
-    const horaInicioFinal = `${fechaSeleccionada}T${horaInicio}:00`;
-    const horaFinFinal = `${fechaSeleccionada}T${horaFin}:00`;
-
-    if (new Date(horaFinFinal) <= new Date(horaInicioFinal)) {
-      Alert.alert(
-        'Horario inválido',
-        'La hora de fin debe ser posterior a la hora de inicio.'
-      );
+    if (!espacioSeleccionado || !fechaSeleccionada || !horaInicio || !horaFin) {
+      Alert.alert('Incompleto', 'Debes seleccionar aula, fecha y horario.');
       return;
     }
 
     try {
       setGuardando(true);
+      const startIso = new Date(`${fechaSeleccionada}T${horaInicio}:00.000Z`);
+      const endIso = new Date(`${fechaSeleccionada}T${horaFin}:00.000Z`);
 
-      const payload = {
+      startIso.setHours(startIso.getHours() + 5);
+      endIso.setHours(endIso.getHours() + 5);
+
+      const bodyData = {
         espacio_id: espacioSeleccionado.id,
         materia,
-        hora_inicio: horaInicioFinal,
-        hora_fin: horaFinFinal,
+        hora_inicio: startIso.toISOString(),
+        hora_fin: endIso.toISOString(),
       };
 
       const response = await fetch(`${API_URL}/api/v1/reservas/`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
           'Content-Type': 'application/json',
+          Accept: 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(bodyData),
       });
 
       const data = await response.json();
@@ -155,11 +115,11 @@ export default function ReservarAulaScreen({ token, onBack }) {
         throw new Error(data?.detail || 'No se pudo crear la reserva.');
       }
 
-      Alert.alert('Reserva creada', 'El aula fue reservada correctamente.');
-      onBack();
+      Alert.alert('Éxito', 'La reserva fue creada exitosamente.', [
+        { text: 'OK', onPress: onBack },
+      ]);
     } catch (error) {
-      console.error('Error creando reserva:', error);
-      Alert.alert('Error', error.message || 'No se pudo crear la reserva.');
+      Alert.alert('Error', error.message || 'Ocurrió un error al reservar.');
     } finally {
       setGuardando(false);
     }
@@ -173,15 +133,11 @@ export default function ReservarAulaScreen({ token, onBack }) {
         setModalAulasVisible(false);
       }}
     >
+      <Ionicons name="business" size={24} color={colors.primary} style={{ marginRight: spacing.sm }} />
       <View style={{ flex: 1 }}>
-        <Text style={styles.optionTitle}>{item.nombre || 'Aula sin nombre'}</Text>
-        <Text style={styles.optionSub}>
-          {item.bloque ? `${item.bloque} · ` : ''}
-          {item.ubicacion || item.tipo || 'Sin ubicación'}
-        </Text>
+        <Text style={styles.optionTitle}>{item.nombre}</Text>
+        <Text style={styles.optionSub}>Capacidad: {item.capacidad || 0} personas</Text>
       </View>
-
-      <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
     </TouchableOpacity>
   );
 
@@ -189,12 +145,12 @@ export default function ReservarAulaScreen({ token, onBack }) {
     <TouchableOpacity
       style={styles.optionCard}
       onPress={() => {
-        setFechaSeleccionada(item.valor);
+        setFechaSeleccionada(item);
         setModalFechaVisible(false);
       }}
     >
-      <Text style={styles.optionTitle}>{item.label}</Text>
-      <Ionicons name="calendar-outline" size={18} color="#2F80ED" />
+      <Ionicons name="calendar-outline" size={22} color={colors.primary} style={{ marginRight: spacing.sm }} />
+      <Text style={styles.optionTitle}>{item}</Text>
     </TouchableOpacity>
   );
 
@@ -206,8 +162,8 @@ export default function ReservarAulaScreen({ token, onBack }) {
         setModalHoraInicioVisible(false);
       }}
     >
+      <Ionicons name="time-outline" size={22} color={colors.primary} style={{ marginRight: spacing.sm }} />
       <Text style={styles.optionTitle}>{item}</Text>
-      <Ionicons name="time-outline" size={18} color="#2F80ED" />
     </TouchableOpacity>
   );
 
@@ -219,246 +175,113 @@ export default function ReservarAulaScreen({ token, onBack }) {
         setModalHoraFinVisible(false);
       }}
     >
+      <Ionicons name="time-outline" size={22} color={colors.primary} style={{ marginRight: spacing.sm }} />
       <Text style={styles.optionTitle}>{item}</Text>
-      <Ionicons name="time-outline" size={18} color="#2F80ED" />
     </TouchableOpacity>
   );
 
   return (
-    <SafeAreaView style={styles.page}>
-      <View style={styles.appShell}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView style={styles.screen} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
 
-        <View style={styles.navbar}>
-          <View style={styles.brandRow}>
-            <TouchableOpacity style={styles.backBtn} onPress={onBack}>
-              <Ionicons name="arrow-back" size={22} color="#2F80ED" />
-            </TouchableOpacity>
-
-            <View style={styles.logoContainer}>
-              <Ionicons name="school" size={18} color="#FFFFFF" />
-            </View>
-
-            <Text style={styles.brandText}>Axis</Text>
-          </View>
-
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>Profesor</Text>
-          </View>
-        </View>
-
-        <ScrollView
-          style={styles.scrollContent}
-          contentContainerStyle={styles.scrollInner}
-          showsVerticalScrollIndicator={false}
-        >
-          <Text style={styles.mainTitle}>Reservar aula</Text>
-
-          <View style={styles.formCard}>
-            <Text style={styles.formTitle}>Nueva reserva</Text>
-
-            <Text style={styles.inputLabel}>Aula</Text>
-            <TouchableOpacity
-              style={styles.selectBox}
-              onPress={() => setModalAulasVisible(true)}
-            >
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={[
-                    styles.selectText,
-                    !espacioSeleccionado && styles.placeholderText,
-                  ]}
-                >
-                  {loadingEspacios
-                    ? 'Cargando aulas...'
-                    : espacioSeleccionado?.nombre || 'Seleccionar aula'}
-                </Text>
-
-                {espacioSeleccionado && (
-                  <Text style={styles.selectSubText}>
-                    {espacioSeleccionado.bloque
-                      ? `${espacioSeleccionado.bloque} · `
-                      : ''}
-                    {espacioSeleccionado.ubicacion || espacioSeleccionado.tipo || ''}
-                  </Text>
-                )}
-              </View>
-
-              {loadingEspacios ? (
-                <ActivityIndicator size="small" color="#2F80ED" />
-              ) : (
-                <Ionicons name="chevron-down" size={20} color="#6B7280" />
-              )}
-            </TouchableOpacity>
-
-            <Text style={styles.inputLabel}>Materia</Text>
-            <View style={styles.selectBox}>
-              <Text style={styles.selectText}>{materia}</Text>
-              <Ionicons name="book-outline" size={20} color="#6B7280" />
-            </View>
-
-            <Text style={styles.inputLabel}>Fecha</Text>
-            <TouchableOpacity
-              style={styles.selectBox}
-              onPress={() => setModalFechaVisible(true)}
-            >
-              <Text
-                style={[
-                  styles.selectText,
-                  !fechaSeleccionada && styles.placeholderText,
-                ]}
-              >
-                {fechaSeleccionada || 'Seleccionar fecha'}
-              </Text>
-
-              <Ionicons name="calendar-outline" size={20} color="#6B7280" />
-            </TouchableOpacity>
-
-            <View style={styles.timeRow}>
-              <View style={styles.timeColumn}>
-                <Text style={styles.inputLabel}>Hora inicio</Text>
-
-                <TouchableOpacity
-                  style={styles.selectBox}
-                  onPress={() => setModalHoraInicioVisible(true)}
-                >
-                  <Text
-                    style={[
-                      styles.selectText,
-                      !horaInicio && styles.placeholderText,
-                    ]}
-                  >
-                    {horaInicio || 'Inicio'}
-                  </Text>
-
-                  <Ionicons name="time-outline" size={20} color="#6B7280" />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.timeColumn}>
-                <Text style={styles.inputLabel}>Hora fin</Text>
-
-                <TouchableOpacity
-                  style={styles.selectBox}
-                  onPress={() => setModalHoraFinVisible(true)}
-                >
-                  <Text
-                    style={[
-                      styles.selectText,
-                      !horaFin && styles.placeholderText,
-                    ]}
-                  >
-                    {horaFin || 'Fin'}
-                  </Text>
-
-                  <Ionicons name="time-outline" size={20} color="#6B7280" />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.submitBtn, guardando && styles.disabledBtn]}
-              onPress={crearReserva}
-              disabled={guardando}
-            >
-              {guardando ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.submitBtnText}>Crear reserva</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-
-        <View style={styles.bottomTab}>
-          <TouchableOpacity style={styles.tabItem} onPress={onBack}>
-            <Ionicons name="business-outline" size={22} color="#828282" />
-            <Text style={styles.tabLabel}>Mi Aula</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabItem}>
-            <Ionicons name="add-circle" size={22} color="#2F80ED" />
-            <Text style={[styles.tabLabel, styles.tabLabelActive]}>Reservar</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabItem}>
-            <Ionicons name="chatbox-ellipses-outline" size={22} color="#828282" />
-            <Text style={styles.tabLabel}>Asistente IA</Text>
-          </TouchableOpacity>
-        </View>
-
-        <SelectorModal
-          visible={modalAulasVisible}
-          title="Seleccionar aula"
-          onClose={() => setModalAulasVisible(false)}
-          data={espacios}
-          renderItem={renderAula}
-          emptyText="No hay aulas registradas."
-        />
-
-        <SelectorModal
-          visible={modalFechaVisible}
-          title="Seleccionar fecha"
-          onClose={() => setModalFechaVisible(false)}
-          data={generarFechas()}
-          renderItem={renderFecha}
-          emptyText="No hay fechas disponibles."
-        />
-
-        <SelectorModal
-          visible={modalHoraInicioVisible}
-          title="Hora de inicio"
-          onClose={() => setModalHoraInicioVisible(false)}
-          data={generarHoras()}
-          renderItem={renderHoraInicio}
-          emptyText="No hay horas disponibles."
-        />
-
-        <SelectorModal
-          visible={modalHoraFinVisible}
-          title="Hora de fin"
-          onClose={() => setModalHoraFinVisible(false)}
-          data={generarHoras()}
-          renderItem={renderHoraFin}
-          emptyText="No hay horas disponibles."
-        />
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={onBack}>
+          <Ionicons name="arrow-back" size={22} color={colors.primary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Nueva Reserva</Text>
+        <View style={styles.headerSpacer} />
       </View>
+
+      <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollInner} showsVerticalScrollIndicator={false}>
+        <Text style={styles.mainTitle}>Agendar Aula</Text>
+
+        <View style={styles.formCard}>
+          <Text style={styles.formTitle}>Detalles de la Reserva</Text>
+
+          <Text style={styles.inputLabel}>Materia</Text>
+          <View style={styles.selectBox}>
+            <Text style={styles.selectText}>{materia}</Text>
+            <Ionicons name="book-outline" size={20} color={colors.textSecondary} />
+          </View>
+
+          <Text style={styles.inputLabel}>Aula / Laboratorio</Text>
+          <TouchableOpacity style={styles.selectBox} onPress={() => setModalAulasVisible(true)} disabled={loadingEspacios}>
+            <View>
+              <Text style={[styles.selectText, !espacioSeleccionado && styles.placeholderText]}>
+                {espacioSeleccionado?.nombre || 'Seleccionar espacio'}
+              </Text>
+              {espacioSeleccionado && (
+                <Text style={styles.selectSubText}>Cap. {espacioSeleccionado.capacidad} | {espacioSeleccionado.estado_actual}</Text>
+              )}
+            </View>
+            {loadingEspacios ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="business-outline" size={20} color={colors.textSecondary} />}
+          </TouchableOpacity>
+
+          <Text style={styles.inputLabel}>Fecha</Text>
+          <TouchableOpacity style={styles.selectBox} onPress={() => setModalFechaVisible(true)}>
+            <Text style={[styles.selectText, !fechaSeleccionada && styles.placeholderText]}>
+              {fechaSeleccionada || 'Seleccionar fecha'}
+            </Text>
+            <Ionicons name="calendar-outline" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+
+          <View style={styles.timeRow}>
+            <View style={styles.timeColumn}>
+              <Text style={styles.inputLabel}>Hora inicio</Text>
+              <TouchableOpacity style={styles.selectBox} onPress={() => setModalHoraInicioVisible(true)}>
+                <Text style={[styles.selectText, !horaInicio && styles.placeholderText]}>
+                  {horaInicio || 'Inicio'}
+                </Text>
+                <Ionicons name="time-outline" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.timeColumn}>
+              <Text style={styles.inputLabel}>Hora fin</Text>
+              <TouchableOpacity style={styles.selectBox} onPress={() => setModalHoraFinVisible(true)}>
+                <Text style={[styles.selectText, !horaFin && styles.placeholderText]}>
+                  {horaFin || 'Fin'}
+                </Text>
+                <Ionicons name="time-outline" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <TouchableOpacity style={[styles.submitBtn, guardando && styles.disabledBtn]} onPress={crearReserva} disabled={guardando}>
+            {guardando ? (
+              <ActivityIndicator size="small" color={colors.white} />
+            ) : (
+              <Text style={styles.submitBtnText}>Confirmar reserva</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+
+      <SelectorModal visible={modalAulasVisible} title="Seleccionar aula" onClose={() => setModalAulasVisible(false)} data={espacios} renderItem={renderAula} emptyText="No hay aulas registradas." />
+      <SelectorModal visible={modalFechaVisible} title="Seleccionar fecha" onClose={() => setModalFechaVisible(false)} data={generarFechas()} renderItem={renderFecha} emptyText="No hay fechas disponibles." />
+      <SelectorModal visible={modalHoraInicioVisible} title="Hora de inicio" onClose={() => setModalHoraInicioVisible(false)} data={generarHoras()} renderItem={renderHoraInicio} emptyText="No hay horas disponibles." />
+      <SelectorModal visible={modalHoraFinVisible} title="Hora de fin" onClose={() => setModalHoraFinVisible(false)} data={generarHoras()} renderItem={renderHoraFin} emptyText="No hay horas disponibles." />
     </SafeAreaView>
   );
 }
 
 function SelectorModal({ visible, title, onClose, data, renderItem, emptyText }) {
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{title}</Text>
-
             <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color="#111827" />
+              <Ionicons name="close" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
 
           {data?.length > 0 ? (
-            <FlatList
-              data={data}
-              keyExtractor={(item, index) =>
-                typeof item === 'string'
-                  ? `${item}-${index}`
-                  : item.id || item.valor || index.toString()
-              }
-              renderItem={renderItem}
-              showsVerticalScrollIndicator={false}
-            />
+            <FlatList data={data} keyExtractor={(item, index) => typeof item === 'string' ? `${item}-${index}` : item.id || index.toString()} renderItem={renderItem} showsVerticalScrollIndicator={false} />
           ) : (
             <View style={styles.emptyModal}>
-              <Ionicons name="file-tray-outline" size={34} color="#BDBDBD" />
+              <Ionicons name="file-tray-outline" size={34} color={colors.textMuted} />
               <Text style={styles.emptyModalText}>{emptyText}</Text>
             </View>
           )}
@@ -469,259 +292,42 @@ function SelectorModal({ visible, title, onClose, data, renderItem, emptyText })
 }
 
 const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    backgroundColor: '#111111',
+  screen: { flex: 1, backgroundColor: colors.background },
+  header: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-
-  appShell: {
-    flex: 1,
-    width: '100%',
-    maxWidth: 430,
-    backgroundColor: '#F9FAFC',
-  },
-
-  navbar: {
-    height: 62,
-    backgroundColor: '#FFFFFF',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.white,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    borderBottomColor: colors.border,
   },
-
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  backBtn: {
-    marginRight: 10,
-  },
-
-  logoContainer: {
-    backgroundColor: '#2F80ED',
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-
-  brandText: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#111827',
-  },
-
-  roleBadge: {
-    backgroundColor: '#EAF2FF',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-
-  roleText: {
-    fontSize: 11,
-    color: '#2F80ED',
-    fontWeight: '700',
-  },
-
-  scrollContent: {
-    flex: 1,
-  },
-
-  scrollInner: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 30,
-  },
-
-  mainTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#111827',
-    marginBottom: 18,
-  },
-
-  formCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 16,
-  },
-
-  formTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#111827',
-    marginBottom: 18,
-  },
-
-  inputLabel: {
-    fontSize: 11,
-    color: '#6B7280',
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    marginBottom: 8,
-    marginTop: 8,
-  },
-
-  selectBox: {
-    minHeight: 54,
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-
-  selectText: {
-    fontSize: 14,
-    color: '#111827',
-    fontWeight: '700',
-  },
-
-  selectSubText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-
-  placeholderText: {
-    color: '#9CA3AF',
-    fontWeight: '600',
-  },
-
-  timeRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-
-  timeColumn: {
-    flex: 1,
-  },
-
-  submitBtn: {
-    backgroundColor: '#2F80ED',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-
-  submitBtnText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-
-  disabledBtn: {
-    opacity: 0.6,
-  },
-
-  bottomTab: {
-    height: 62,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingBottom: 4,
-  },
-
-  tabItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 80,
-  },
-
-  tabLabel: {
-    fontSize: 11,
-    color: '#828282',
-    marginTop: 4,
-  },
-
-  tabLabelActive: {
-    color: '#2F80ED',
-    fontWeight: '700',
-  },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(17, 24, 39, 0.45)',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-  },
-
-  modalContent: {
-    width: '100%',
-    maxWidth: 430,
-    maxHeight: '72%',
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingHorizontal: 18,
-    paddingTop: 16,
-    paddingBottom: 24,
-  },
-
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#111827',
-  },
-
-  optionCard: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  optionTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#111827',
-  },
-
-  optionSub: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 3,
-  },
-
-  emptyModal: {
-    paddingVertical: 30,
-    alignItems: 'center',
-  },
-
-  emptyModalText: {
-    fontSize: 13,
-    color: '#828282',
-    marginTop: 8,
-  },
+  backBtn: { padding: spacing.xs },
+  headerTitle: { fontSize: typography.size.md, fontWeight: typography.weight.bold, color: colors.textPrimary },
+  headerSpacer: { width: 32 },
+  scrollContent: { flex: 1 },
+  scrollInner: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xxl },
+  mainTitle: { fontSize: typography.size.xl, fontWeight: typography.weight.bold, color: colors.textPrimary, marginBottom: spacing.lg },
+  formCard: { backgroundColor: colors.white, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
+  formTitle: { fontSize: typography.size.md, fontWeight: typography.weight.bold, color: colors.textPrimary, marginBottom: spacing.lg },
+  inputLabel: { fontSize: 11, color: colors.textSecondary, fontWeight: typography.weight.bold, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 8, marginTop: 8 },
+  selectBox: { minHeight: 54, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  selectText: { fontSize: typography.size.sm, color: colors.textPrimary, fontWeight: typography.weight.bold },
+  selectSubText: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  placeholderText: { color: colors.textMuted, fontWeight: typography.weight.semibold },
+  timeRow: { flexDirection: 'row', gap: 10 },
+  timeColumn: { flex: 1 },
+  submitBtn: { backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
+  submitBtnText: { color: colors.white, fontSize: typography.size.sm, fontWeight: typography.weight.bold },
+  disabledBtn: { opacity: 0.6 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(17, 24, 39, 0.45)', justifyContent: 'flex-end', alignItems: 'center' },
+  modalContent: { width: '100%', maxWidth: 430, maxHeight: '72%', backgroundColor: colors.white, borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 24 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  modalTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.textPrimary },
+  optionCard: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center' },
+  optionTitle: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.textPrimary },
+  optionSub: { fontSize: 12, color: colors.textSecondary, marginTop: 3 },
+  emptyModal: { paddingVertical: 30, alignItems: 'center' },
+  emptyModalText: { fontSize: 13, color: colors.textSecondary, marginTop: 8 },
 });

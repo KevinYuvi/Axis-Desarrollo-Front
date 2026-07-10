@@ -3,22 +3,30 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { useUser } from '@clerk/clerk-expo';
+import { useUser } from '../../src/shared/hooks/useClerkOrMock';
+import { useRouter } from 'expo-router';
 import { colors } from '../../src/shared/theme/colors';
 import { typography } from '../../src/shared/theme/typography';
 import { spacing, radius } from '../../src/shared/theme/spacing';
 import { AppHeader } from '../../src/shared/components';
 
 const ACCIONES_ADMIN = [
-  { id: 'espacios', icon: 'business-outline', label: 'Gestionar Espacios', desc: 'Aulas, laboratorios y salas' },
-  { id: 'usuarios', icon: 'people-outline', label: 'Gestionar Usuarios', desc: 'Roles y permisos' },
-  { id: 'reportes', icon: 'warning-outline', label: 'Ver Incidencias', desc: 'Revisar reportes del campus' },
-  { id: 'reservas', icon: 'calendar-outline', label: 'Ver Reservas', desc: 'Control de reservas activas' },
+  { id: 'espacios', icon: 'business-outline', label: 'Gestionar Espacios', desc: 'Aulas, laboratorios y salas', route: '/(dashboard)/admin-espacios' },
+  { id: 'usuarios', icon: 'people-outline', label: 'Gestionar Usuarios', desc: 'Roles y permisos', route: '/(dashboard)/admin-usuarios' },
+  { id: 'reportes', icon: 'warning-outline', label: 'Ver Incidencias', desc: 'Revisar reportes del campus', route: '/(dashboard)/reportes' },
+  { id: 'reservas', icon: 'calendar-outline', label: 'Ver Reservas', desc: 'Control de reservas activas', route: '/(dashboard)/reservas' },
 ];
 
 export default function AdminScreen() {
   const { user } = useUser();
+  const router = useRouter();
   const rol = user?.publicMetadata?.rol?.toLowerCase() || 'admin';
+
+  const handleAction = (route) => {
+    if (route) {
+      router.push(route);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -32,7 +40,11 @@ export default function AdminScreen() {
 
         <View style={styles.grid}>
           {ACCIONES_ADMIN.map((item) => (
-            <TouchableOpacity key={item.id} style={styles.card}>
+            <TouchableOpacity 
+              key={item.id} 
+              style={styles.card}
+              onPress={() => handleAction(item.route)}
+            >
               <View style={styles.iconWrap}>
                 <Ionicons name={item.icon} size={28} color={colors.primary} />
               </View>

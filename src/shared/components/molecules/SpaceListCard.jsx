@@ -57,7 +57,13 @@ export default function SpaceListCard({ space, onPressDetail }) {
         <Button
           title="Cómo llegar"
           variant="secondary"
-          onPress={() => router.push(`/ruta/${space.id}`)}
+          onPress={() => {
+            if (space.lat && space.lng) {
+              router.push(`/ruta/${space.id}?lat=${space.lat}&lng=${space.lng}&nombre=${encodeURIComponent(space.name)}`);
+            } else {
+              router.push(`/ruta/${space.id}`);
+            }
+          }}
         />
       </View>
     </View>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { useUser } from '@clerk/clerk-expo';
+import { useUser } from '../../src/shared/hooks/useClerkOrMock';
 import { Ionicons } from '@expo/vector-icons';
 import { ActivityIndicator, View } from 'react-native';
 import { OccupancyProvider } from '../../src/shared/context/OccupancyContext';
@@ -54,46 +54,47 @@ export default function DashboardLayout() {
           },
         }}
       >
-        {/* 1. INICIO: home de estudiante con recomendaciones de ocupación */}
+        {/* 1. INICIO: home dinámico según el rol */}
         <Tabs.Screen
           name="index"
           options={{
-            title: 'Inicio',
-            tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" size={22} color={color} />,
-            href: isDocente ? null : '/(dashboard)',
+            title: isDocente ? 'Mi Aula' : isAyudante ? 'Soporte' : 'Inicio',
+            tabBarIcon: ({ color }) => <Ionicons name="home-outline" size={22} color={color} />,
+            href: isAdmin ? null : '/(dashboard)',
           }}
         />
 
-        {/* 2. DOCENTE: home del profesor (cronograma, aula actual) */}
+        {/* 2. ADMIN: Panel de Gestión (solo para Administradores) */}
         <Tabs.Screen
-          name="docente"
+          name="admin"
           options={{
-            title: 'Inicio',
-            tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" size={22} color={color} />,
-            href: isDocente ? '/(dashboard)/docente' : null,
+            title: 'Panel',
+            tabBarIcon: ({ color }) => <Ionicons name="briefcase-outline" size={22} color={color} />,
+            href: isAdmin ? '/(dashboard)/admin' : null,
           }}
         />
 
-        {/* 3. CAMPUS / MAPA: Visible para todos */}
-        <Tabs.Screen
-          name="mapa"
-          options={{
-            title: 'Campus',
-            tabBarIcon: ({ color }) => <Ionicons name="map-outline" size={22} color={color} />,
-          }}
-        />
-
-        {/* 4. BIBLIOTECAS: espacios de estudio con ocupación en tiempo real */}
+        {/* 3. BIBLIOTECAS: Solo visible en la barra inferior para Estudiantes */}
         <Tabs.Screen
           name="bibliotecas"
           options={{
             title: 'Bibliotecas',
             tabBarIcon: ({ color }) => <Ionicons name="book-outline" size={22} color={color} />,
-            href: (isEstudiante || isAyudante) ? '/(dashboard)/bibliotecas' : null,
+            href: isEstudiante ? '/(dashboard)/bibliotecas' : null,
           }}
         />
 
-        {/* 5. ASISTENTE IA: todos los roles */}
+        {/* 4. RESERVAS: Solo visible en la barra inferior para Docentes */}
+        <Tabs.Screen
+          name="reservas"
+          options={{
+            title: 'Reservar',
+            tabBarIcon: ({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />,
+            href: isDocente ? '/(dashboard)/reservas' : null,
+          }}
+        />
+
+        {/* 5. ASISTENTE IA: Visible en la barra para TODOS los roles */}
         <Tabs.Screen
           name="asistente"
           options={{
@@ -102,43 +103,38 @@ export default function DashboardLayout() {
           }}
         />
 
-        {/* 6. RESERVAS: Estudiantes y Docentes */}
-        <Tabs.Screen
-          name="reservas"
-          options={{
-            title: 'Reservas',
-            tabBarIcon: ({ color }) => <Ionicons name="calendar-outline" size={22} color={color} />,
-            href: (isEstudiante || isDocente) ? '/(dashboard)/reservas' : null,
-          }}
-        />
-
-        {/* 7. REPORTES / INCIDENCIAS: Docentes, Ayudantes y Admins */}
+        {/* 6. REPORTES / INCIDENCIAS: Docentes y Ayudantes */}
         <Tabs.Screen
           name="reportes"
           options={{
             title: 'Incidencias',
             tabBarIcon: ({ color }) => <Ionicons name="warning-outline" size={22} color={color} />,
-            href: (isDocente || isAyudante || isAdmin) ? '/(dashboard)/reportes' : null,
+            href: (isDocente || isAyudante) ? '/(dashboard)/reportes' : null,
           }}
         />
 
-        {/* 8. GESTIÓN: Solo Administradores */}
-        <Tabs.Screen
-          name="admin"
-          options={{
-            title: 'Gestión',
-            tabBarIcon: ({ color }) => <Ionicons name="briefcase-outline" size={22} color={color} />,
-            href: isAdmin ? '/(dashboard)/admin' : null,
-          }}
-        />
-
-        {/* 9. PERFIL: Todos los usuarios */}
+        {/* 7. PERFIL: Oculto de la barra inferior, accesible desde el AppHeader */}
         <Tabs.Screen
           name="perfil"
           options={{
             title: 'Perfil',
             tabBarIcon: ({ color }) => <Ionicons name="person-circle-outline" size={22} color={color} />,
+            href: null,
           }}
+        />
+
+        {/* --- RUTAS OCULTAS DE LA BARRA INFERIOR (Accesibles vía botones internos) --- */}
+        <Tabs.Screen
+          name="mapa"
+          options={{ href: null }} // Oculto de la barra, accesible desde inicio
+        />
+        <Tabs.Screen
+          name="admin-espacios"
+          options={{ href: null }} // Ruta hija de Admin
+        />
+        <Tabs.Screen
+          name="admin-usuarios"
+          options={{ href: null }} // Ruta hija de Admin
         />
 
         {/* ── Rutas sin tab propio (pantallas auxiliares) ── */}

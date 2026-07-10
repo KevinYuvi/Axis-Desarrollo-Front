@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity,
-  StatusBar, ActivityIndicator, Alert, ScrollView, TextInput,
+  StatusBar, ActivityIndicator, Alert, ScrollView, TextInput, KeyboardAvoidingView, Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -79,10 +79,15 @@ export default function ReportarIncidenciaScreen({ token, claseActual, onBack })
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollInner} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollInner} showsVerticalScrollIndicator={false}>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Nuevo reporte</Text>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Nuevo reporte</Text>
 
           <Text style={styles.inputLabel}>Recurso afectado</Text>
           <TextInput
@@ -128,14 +133,17 @@ export default function ReportarIncidenciaScreen({ token, claseActual, onBack })
             style={[styles.submitBtn, enviando && styles.disabledBtn]}
             onPress={enviarReporte}
             disabled={enviando}
+            accessibilityRole="button"
           >
-            {enviando
-              ? <ActivityIndicator size="small" color={colors.white} />
-              : <Text style={styles.submitBtnText}>Generar ticket</Text>
-            }
+            {enviando ? (
+              <ActivityIndicator color={colors.white} />
+            ) : (
+              <Text style={styles.submitBtnText}>Enviar reporte</Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

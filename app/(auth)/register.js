@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useSignUp } from '@clerk/clerk-expo';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { authStyles as styles } from '../../src/shared/theme/authStyles';
 
 export default function RegisterScreen() {
   const { isLoaded, signUp, setActive } = useSignUp();
   const router = useRouter();
+  const { rol } = useLocalSearchParams();
   
   const [emailAddress, setEmailAddress] = useState('');
   const [password, setPassword] = useState('');
@@ -46,7 +47,13 @@ export default function RegisterScreen() {
 
     setLoading(true);
     try {
-      await signUp.create({ emailAddress, password });
+      await signUp.create({ 
+        emailAddress, 
+        password,
+        unsafeMetadata: {
+          rol: rol || 'estudiante'
+        }
+      });
       await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
       setPendingVerification(true);
     } catch (err) {
@@ -177,10 +184,10 @@ export default function RegisterScreen() {
       </View>
 
       <TouchableOpacity style={styles.primaryButton} onPress={onSignUpPress} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Registrarse</Text>}
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Registrar como {rol ? rol.charAt(0).toUpperCase() + rol.slice(1) : 'Estudiante'}</Text>}
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.switchFlowContainer} onPress={() => router.back()}>
+      <TouchableOpacity style={styles.switchFlowContainer} onPress={() => router.push(`/(auth)/login?rol=${rol || 'estudiante'}`)}>
         <Text style={styles.switchFlowText}>¿Ya tienes una cuenta? <Text style={styles.switchFlowLink}>Inicia sesión</Text></Text>
       </TouchableOpacity>
     </View>

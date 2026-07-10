@@ -27,6 +27,8 @@ function mapSpace(space) {
     availableTables: space.freeSeats,
     availableComputers: space.computersAvailable,
     distanceTime: `${space.distanceMinutes} min`,
+    lat: space.latitude,
+    lng: space.longitude,
     resources: [
       space.studyRoomsTotal > 0 ? 'salas' : null,
       space.computersTotal > 0 ? 'computadores' : null,

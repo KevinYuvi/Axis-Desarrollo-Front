@@ -24,6 +24,8 @@ export const librariesMock = [
     availableComputers: 5,
     distanceTime: '5 min',
     resources: ['Mesas', 'computadores', 'WiFi'],
+    lat: -0.1995,
+    lng: -78.5042,
   },
   {
     id: 2,
@@ -35,6 +37,8 @@ export const librariesMock = [
     availableComputers: 2,
     distanceTime: '8 min',
     resources: ['Mesas', 'salas', 'WiFi'],
+    lat: -0.2012,
+    lng: -78.5001,
   },
   {
     id: 3,
@@ -46,6 +50,8 @@ export const librariesMock = [
     availableComputers: 0,
     distanceTime: '3 min',
     resources: ['Pizarra', 'tomacorrientes'],
+    lat: -0.1989,
+    lng: -78.5030,
   },
   {
     id: 4,
@@ -57,5 +63,7 @@ export const librariesMock = [
     availableComputers: 0,
     distanceTime: '6 min',
     resources: ['Computadoras', 'proyector'],
+    lat: -0.2010,
+    lng: -78.5015,
   },
 ];

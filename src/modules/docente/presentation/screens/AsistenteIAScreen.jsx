@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
+import { AppHeader } from '../../../../shared/components';
 import {
   AudioModule,
   RecordingPresets,
@@ -28,13 +29,13 @@ import {
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 const preguntasRapidas = [
+  '¿Qué biblioteca tiene más espacio disponible ahora?',
   '¿Dónde queda el Laboratorio de Computación 3?',
-  'El proyector del Laboratorio de Computación 3 no enciende.',
   '¿Tengo una clase activa en este momento?',
-  'Quiero reportar una computadora dañada.',
+  'El proyector del Laboratorio 3 no enciende.',
 ];
 
-export default function AsistenteIAScreen({ token, onBack, onVerReportes }) {
+export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol }) {
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(audioRecorder);
 
@@ -359,11 +360,11 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes }) {
     return (
       <View style={[styles.messageRow, styles.messageRowIA]}>
         <View style={styles.botAvatar}>
-          <Ionicons name="sparkles" size={18} color="#FFFFFF" />
+          <Ionicons name="sparkles" size={18} color={colors.white} />
         </View>
 
         <View style={[styles.messageBubble, styles.iaBubble, styles.typingBubble]}>
-          <ActivityIndicator size="small" color="#2F80ED" />
+          <ActivityIndicator size="small" color={colors.primary} />
           <Text style={styles.typingText}>...</Text>
         </View>
       </View>
@@ -374,19 +375,24 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes }) {
     <SafeAreaView style={styles.screen} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
 
-      {/* Cabecera con botón de regreso */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={onBack} accessibilityLabel="Volver">
-          <Ionicons name="arrow-back" size={22} color={colors.primary} />
-        </TouchableOpacity>
-        <View style={styles.headerBrand}>
-          <View style={styles.headerIcon}>
-            <Ionicons name="sparkles" size={16} color={colors.white} />
+      {/* Si viene del tab (sin onBack) → cabecera AXIS estándar */}
+      {/* Si viene como sub-pantalla (con onBack) → cabecera con botón atrás */}
+      {onBack ? (
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={onBack} accessibilityLabel="Volver">
+            <Ionicons name="arrow-back" size={22} color={colors.primary} />
+          </TouchableOpacity>
+          <View style={styles.headerBrand}>
+            <View style={styles.headerIcon}>
+              <Ionicons name="sparkles" size={16} color={colors.white} />
+            </View>
+            <Text style={styles.headerTitle}>Asistente IA</Text>
           </View>
-          <Text style={styles.headerTitle}>Asistente IA</Text>
+          <View style={styles.headerSpacer} />
         </View>
-        <View style={styles.headerSpacer} />
-      </View>
+      ) : (
+        <AppHeader rol={rol || 'estudiante'} />
+      )}
 
       <KeyboardAvoidingView
         style={styles.body}

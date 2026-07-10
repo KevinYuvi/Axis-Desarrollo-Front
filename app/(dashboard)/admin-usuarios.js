@@ -1,15 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { useAuth, useUser } from '../../src/shared/hooks/useClerkOrMock';
+import { useAuth } from '@clerk/clerk-expo';
+import { useRouter } from 'expo-router';
 import { colors } from '../../src/shared/theme/colors';
-import AsistenteIAScreen from '../../src/modules/docente/presentation/screens/AsistenteIAScreen';
+import UsuariosAdminScreen from '../../src/modules/admin/presentation/screens/UsuariosAdminScreen';
 
-export default function AsistenteRoute() {
+export default function AdminUsuariosRoute() {
+  const router = useRouter();
   const { getToken } = useAuth();
-  const { user } = useUser();
   const [token, setToken] = useState(null);
-
-  const rol = user?.publicMetadata?.rol?.toLowerCase() || 'estudiante';
 
   useEffect(() => {
     let activo = true;
@@ -25,13 +24,10 @@ export default function AsistenteRoute() {
     );
   }
 
-  // onBack = undefined → componente mostrará AppHeader normal (modo tab)
-  // onVerReportes navega al tab de reportes
   return (
-    <AsistenteIAScreen
+    <UsuariosAdminScreen
       token={token}
-      rol={rol}
-      onVerReportes={undefined}
+      onBack={() => (router.canGoBack() ? router.back() : router.push('/(dashboard)/admin'))}
     />
   );
 }

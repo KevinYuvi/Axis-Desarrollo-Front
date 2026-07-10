@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useSignIn } from '@clerk/clerk-expo';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { authStyles as styles } from '../../src/shared/theme/authStyles';
+import { setMockSession } from '../../src/shared/hooks/useClerkOrMock';
 
 export default function LoginScreen() {
   const { signIn, setActive, isLoaded } = useSignIn();
   const router = useRouter();
+  const { rol } = useLocalSearchParams();
   
   const [emailAddress, setEmailAddress] = useState('');
   const [password, setPassword] = useState('');
@@ -22,6 +24,7 @@ export default function LoginScreen() {
   const [isVerifying2FA, setIsVerifying2FA] = useState(false);
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState('');
+
 
   const onSignInPress = async () => {
     if (!isLoaded) return;
@@ -45,6 +48,38 @@ export default function LoginScreen() {
     }
 
     if (!isValid) return;
+
+    // === INTERCEPTOR DE CREDENCIALES QUEMADAS (MOCK BYPASS) ===
+    if (cleanEmail === 'ayudante@uce.edu.ec' && password === 'ayudante') {
+      setMockSession({
+        token: 'mock-ayudante-token',
+        email: 'ayudante@uce.edu.ec',
+        rol: 'ayudante',
+        nombre: 'Ayudante de Soporte',
+      });
+      router.replace('/(dashboard)');
+      return;
+    }
+    if (cleanEmail === 'profesor@uce.edu.ec' && password === 'profesor') {
+      setMockSession({
+        token: 'mock-docente-token',
+        email: 'profesor@uce.edu.ec',
+        rol: 'docente',
+        nombre: 'Profesor de Prueba',
+      });
+      router.replace('/(dashboard)');
+      return;
+    }
+    if (cleanEmail === 'estudiante@uce.edu.ec' && password === 'estudiante') {
+      setMockSession({
+        token: 'mock-estudiante-token',
+        email: 'estudiante@uce.edu.ec',
+        rol: 'estudiante',
+        nombre: 'Estudiante de Prueba',
+      });
+      router.replace('/(dashboard)');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -216,10 +251,10 @@ export default function LoginScreen() {
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.primaryButton} onPress={onSignInPress} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Iniciar sesión</Text>}
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Iniciar sesión como {rol ? rol.charAt(0).toUpperCase() + rol.slice(1) : 'Estudiante'}</Text>}
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.switchFlowContainer} onPress={() => router.push('/(auth)/register')}>
+      <TouchableOpacity style={styles.switchFlowContainer} onPress={() => router.push(`/(auth)/register?rol=${rol || 'estudiante'}`)}>
         <Text style={styles.switchFlowText}>¿No tienes una cuenta? <Text style={styles.switchFlowLink}>Regístrate</Text></Text>
       </TouchableOpacity>
     </View>
