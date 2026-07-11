@@ -1,6 +1,5 @@
 import React, { createContext, useCallback, useEffect, useState } from 'react';
 import { getOccupancySpaces, getOccupancyRecommendation } from '../services/occupancyApi';
-import { librariesMock, summaryMock, recommendedSpaceMock } from '../mocks/spacesMock';
 
 const TYPE_LABELS = {
   library: 'Biblioteca',
@@ -52,16 +51,7 @@ function buildSummary(rawSpaces) {
   };
 }
 
-const FALLBACK_RECOMMENDATION = {
-  space: {
-    ...recommendedSpaceMock,
-    freeSeats: recommendedSpaceMock.availableTables,
-    computersAvailable: 0,
-    distanceMinutes: parseInt(recommendedSpaceMock.distanceTime, 10) || 0,
-  },
-  reason: `${recommendedSpaceMock.name} · ${recommendedSpaceMock.occupancy}% ocupación · ${recommendedSpaceMock.availableTables} mesas libres · a ${recommendedSpaceMock.distanceTime}`,
-  confidence: null,
-};
+const EMPTY_SUMMARY = { tables: 0, computers: 0, rooms: 0 };
 
 export const OccupancyContext = createContext(null);
 
@@ -75,9 +65,8 @@ export const OccupancyContext = createContext(null);
 export function OccupancyProvider({ children }) {
   const [state, setState] = useState({
     loading: true,
-    isFallback: false,
     spaces: [],
-    summary: summaryMock,
+    summary: EMPTY_SUMMARY,
     recommendation: null,
   });
 
@@ -102,18 +91,17 @@ export function OccupancyProvider({ children }) {
 
       setState({
         loading: false,
-        isFallback: false,
         spaces: rawSpaces.map(mapSpace),
         summary: buildSummary(rawSpaces),
         recommendation: recommendationRes.data,
       });
     } catch (error) {
+      console.error('Error cargando ocupación:', error);
       setState({
         loading: false,
-        isFallback: true,
-        spaces: librariesMock,
-        summary: summaryMock,
-        recommendation: FALLBACK_RECOMMENDATION,
+        spaces: [],
+        summary: EMPTY_SUMMARY,
+        recommendation: null,
       });
     }
   }, []);

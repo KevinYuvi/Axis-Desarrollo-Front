@@ -12,7 +12,7 @@ export default function StartPage() {
       </View>
     );
   }
-  if (!isSignedIn) return <Redirect href="/(auth)/splash" />;
+  if (!isSignedIn) return <Redirect href="/(auth)/login" />;
 
   const rol = user?.publicMetadata?.rol?.toLowerCase() ?? 'estudiante';
   if (rol === 'admin') return <Redirect href="/(dashboard)/admin" />;

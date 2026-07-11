@@ -27,7 +27,7 @@ export default function RouteToSpaceScreen() {
       const pos = await Location.getCurrentPositionAsync({});
       setOrigen({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
 
-      // Si nos pasan lat y lng por paramétros (caso mocks de bibliotecas)
+      // Si nos pasan lat y lng por parámetros directamente
       if (lat && lng && nombre) {
         setDestino({
           latitude: parseFloat(lat),

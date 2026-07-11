@@ -1,8 +1,7 @@
 import axios from 'axios';
 import { API_V1 } from '../config/api';
 
-// Las consultas mock (spaces/recommendation) son instantáneas en el backend;
-// este timeout solo cubre latencia de red normal en la misma WiFi.
+// Timeout de red para consultas de ocupación.
 const DEFAULT_TIMEOUT_MS = 8000;
 
 const client = axios.create({
@@ -11,7 +10,7 @@ const client = axios.create({
 });
 
 /**
- * Obtiene la lista completa de espacios de estudio con su ocupación simulada
+ * Obtiene la lista completa de espacios de estudio con su ocupación
  * @returns {Promise<Object>} Promesa que resuelve con los datos de respuesta del API
  */
 export async function getOccupancySpaces() {

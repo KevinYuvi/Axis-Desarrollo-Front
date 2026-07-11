@@ -4,18 +4,20 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { colors } from '../../src/shared/theme/colors';
 
-export default function DashboardLayout() {
+export default function DocenteLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: '#828282',
+        tabBarInactiveTintColor: '#8A8F98',
         tabBarStyle: {
-          height: 62,
-          paddingBottom: 6,
+          height: 64,
           paddingTop: 6,
+          paddingBottom: 8,
+          borderTopWidth: 1,
           borderTopColor: '#E5E7EB',
+          backgroundColor: '#FFFFFF',
         },
         tabBarLabelStyle: {
           fontSize: 11,
@@ -26,19 +28,9 @@ export default function DashboardLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Mi Aula',
+          title: 'Inicio',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="business-outline" size={size} color={color} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="reservas"
-        options={{
-          title: 'Reservar',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="add-circle-outline" size={size} color={color} />
+            <Ionicons name="home-outline" size={size} color={color} />
           ),
         }}
       />
@@ -46,7 +38,7 @@ export default function DashboardLayout() {
       <Tabs.Screen
         name="reportes"
         options={{
-          title: 'Incidencias',
+          title: 'Reportes',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="document-text-outline" size={size} color={color} />
           ),
@@ -67,32 +59,16 @@ export default function DashboardLayout() {
         }}
       />
 
+      {/* Pantallas internas ocultas del navbar */}
+      <Tabs.Screen
+        name="reservas"
+        options={{
+          href: null,
+        }}
+      />
+
       <Tabs.Screen
         name="perfil"
-        options={{
-          title: 'Perfil',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-circle-outline" size={size} color={color} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="admin"
-        options={{
-          href: null,
-        }}
-      />
-
-      <Tabs.Screen
-        name="admin-usuarios"
-        options={{
-          href: null,
-        }}
-      />
-
-      <Tabs.Screen
-        name="admin-espacios"
         options={{
           href: null,
         }}

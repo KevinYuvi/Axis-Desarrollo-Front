@@ -1,11 +1,16 @@
 import React from 'react';
+import { Feather } from '@expo/vector-icons'; // Corregido el typo aquí
 import {
-  View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, Alert, ActivityIndicator,
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Feather } from '@expo/vector-icons';
 import { useUser } from '../../../../shared/hooks/useClerkOrMock';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
@@ -16,7 +21,7 @@ import { useOccupancy } from '../../../../shared/hooks/useOccupancy';
 export default function StudentHomeScreen({ onNavigate, onNavigateToCamera }) {
   const { user } = useUser();
   const rol = user?.publicMetadata?.rol?.toLowerCase() || 'estudiante';
-  const { loading, isFallback, summary, recommendation } = useOccupancy();
+  const { loading, summary, recommendation } = useOccupancy();
 
   const handleRecommendation = () => {
     if (!recommendation) {
@@ -41,31 +46,30 @@ export default function StudentHomeScreen({ onNavigate, onNavigateToCamera }) {
         <Text style={styles.title}>Encuentra dónde estudiar</Text>
         <Text style={styles.subtitle}>Espacios disponibles en el campus UCE</Text>
 
-        {isFallback && (
-          <View style={styles.fallbackNotice}>
-            <Feather name="wifi-off" size={12} color={colors.textSecondary} style={{ marginRight: 6 }} />
-            <Text style={styles.fallbackText}>Mostrando datos simulados</Text>
-          </View>
-        )}
-
         <SearchInput placeholder="Buscar biblioteca, sala o computadora..." />
 
         {loading ? (
           <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.xl }} />
         ) : (
           <>
-            {/* Tarjetas de resumen */}
+            {/* Tarjetas de resumen con fallback a 0 por seguridad */}
             <View style={styles.summaryContainer}>
               <View style={styles.summaryCard}>
-                <Text style={[styles.summaryNumber, { color: colors.available }]}>{summary.tables}</Text>
+                <Text style={[styles.summaryNumber, { color: colors.available }]}>
+                  {summary?.tables ?? 0}
+                </Text>
                 <Text style={styles.summaryLabel}>Mesas libres</Text>
               </View>
               <View style={styles.summaryCard}>
-                <Text style={[styles.summaryNumber, { color: colors.primary }]}>{summary.computers}</Text>
+                <Text style={[styles.summaryNumber, { color: colors.primary }]}>
+                  {summary?.computers ?? 0}
+                </Text>
                 <Text style={styles.summaryLabel}>Computadoras</Text>
               </View>
               <View style={styles.summaryCard}>
-                <Text style={[styles.summaryNumber, { color: colors.available }]}>{summary.rooms}</Text>
+                <Text style={[styles.summaryNumber, { color: colors.available }]}>
+                  {summary?.rooms ?? 0}
+                </Text>
                 <Text style={styles.summaryLabel}>Salas</Text>
               </View>
             </View>
@@ -121,22 +125,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.xs,
     marginBottom: spacing.lg,
-  },
-  fallbackNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    marginBottom: spacing.md,
-  },
-  fallbackText: {
-    fontSize: typography.size.xs,
-    color: colors.textSecondary,
   },
   summaryContainer: {
     flexDirection: 'row',

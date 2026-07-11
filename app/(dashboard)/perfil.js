@@ -54,7 +54,7 @@ export default function PerfilScreen() {
   const handleSignOut = async () => {
     try {
       await signOut();
-      router.replace('/(auth)/splash');
+      router.replace('/(auth)/login');
     } catch (e) {
       console.error('Error signing out:', e);
     }

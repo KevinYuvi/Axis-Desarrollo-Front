@@ -5,7 +5,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Feather } from '@expo/vector-icons';
 import { useUser } from '../../../../shared/hooks/useClerkOrMock';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
@@ -18,7 +17,7 @@ const FILTERS = ['Todas', 'Bibliotecas', 'Salas', 'Computadoras'];
 export default function LibrariesScreen({ onNavigate, onNavigateToCamera }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('Todas');
-  const { loading, isFallback, spaces } = useOccupancy();
+  const { loading, spaces } = useOccupancy();
   const { user } = useUser();
   const rol = user?.publicMetadata?.rol?.toLowerCase() || 'estudiante';
 
@@ -56,13 +55,6 @@ export default function LibrariesScreen({ onNavigate, onNavigateToCamera }) {
 
         <Text style={styles.title}>Bibliotecas y salas</Text>
         <Text style={styles.subtitle}>Consulta espacios disponibles en la UCE</Text>
-
-        {isFallback && (
-          <View style={styles.fallbackNotice}>
-            <Feather name="wifi-off" size={12} color={colors.textSecondary} style={{ marginRight: 6 }} />
-            <Text style={styles.fallbackText}>Mostrando datos simulados</Text>
-          </View>
-        )}
 
         <SearchInput
           value={searchQuery}
@@ -132,22 +124,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.xs,
     marginBottom: spacing.lg,
-  },
-  fallbackNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    marginBottom: spacing.md,
-  },
-  fallbackText: {
-    fontSize: typography.size.xs,
-    color: colors.textSecondary,
   },
   filtersContainer: {
     marginBottom: spacing.lg,

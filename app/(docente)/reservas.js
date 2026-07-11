@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, Alert } from 'react-native';
+import { useRouter } from 'expo-router';
 
 import { useAxisToken } from '../../src/shared/hooks/useAxisToken';
-import { DocenteHomeScreen } from '../../src/modules/docente';
+import { ReservarAulaScreen } from '../../src/modules/docente';
 
-export default function DashboardHomeRoute() {
+export default function DocenteReservasRoute() {
+  const router = useRouter();
   const { obtenerTokenAxis, isLoaded, isSignedIn } = useAxisToken();
 
   const [token, setToken] = useState(null);
@@ -18,7 +20,10 @@ export default function DashboardHomeRoute() {
         if (!isLoaded) return;
 
         if (!isSignedIn) {
-          setToken(null);
+          if (activo) {
+            setToken(null);
+            setCargando(false);
+          }
           return;
         }
 
@@ -28,7 +33,7 @@ export default function DashboardHomeRoute() {
           setToken(tokenAxis);
         }
       } catch (error) {
-        console.error('Error obteniendo token Axis en home docente:', error);
+        console.error('Error obteniendo token Axis en reservas docente:', error);
         Alert.alert('Error', 'No se pudo obtener el token de sesión.');
       } finally {
         if (activo && isLoaded) {
@@ -59,5 +64,10 @@ export default function DashboardHomeRoute() {
     );
   }
 
-  return <DocenteHomeScreen token={token} />;
+  return (
+    <ReservarAulaScreen
+      token={token}
+      onBack={() => router.replace('/(docente)')}
+    />
+  );
 }
