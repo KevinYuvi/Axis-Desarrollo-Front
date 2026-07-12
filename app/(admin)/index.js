@@ -1,9 +1,5 @@
-import { View, Text } from 'react-native';
+import AdminHomeScreen from '../../src/modules/admin/presentation/screens/AdminHomeScreen';
 
-export default function EstudianteHome() {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Text>Inicio estudiante</Text>
-    </View>
-  );
+export default function AdminHomeRoute() {
+  return <AdminHomeScreen />;
 }
