@@ -120,7 +120,6 @@ export default function LoginScreen({ onDemoAccess, onLoginSubmit }) {
   );
 }
 
-// Mantenemos tus estilos exactamente intactos tal como los tienes abajo
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#FFF' },
   flex: { flex: 1 },

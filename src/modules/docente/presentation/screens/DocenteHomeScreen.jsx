@@ -27,7 +27,7 @@ const CLERK_JWT_TEMPLATE = 'Axis';
 
 export default function DocenteHomeScreen({ token }) {
   const router = useRouter();
-  const { getToken, signOut } = useAuth();
+  const { getToken } = useAuth();
 
   const [pantallaActual, setPantallaActual] = useState('home');
   const [claseActual, setClaseActual] = useState(null);
@@ -54,11 +54,13 @@ export default function DocenteHomeScreen({ token }) {
   const convertirFechaBackend = (fechaTexto) => {
     if (!fechaTexto) return null;
 
-    if (typeof fechaTexto === 'string' && !fechaTexto.endsWith('Z')) {
-      return new Date(fechaTexto);
+    const fecha = new Date(fechaTexto);
+
+    if (Number.isNaN(fecha.getTime())) {
+      return null;
     }
 
-    return new Date(fechaTexto);
+    return fecha;
   };
 
   const obtenerTiempo = (isoFecha) => {
@@ -215,16 +217,6 @@ export default function DocenteHomeScreen({ token }) {
     }, [])
   );
 
-  const cerrarSesion = async () => {
-    try {
-      await signOut();
-      router.replace('/(auth)/login');
-    } catch (error) {
-      console.error('Error cerrando sesión:', error);
-      Alert.alert('Error', 'No se pudo cerrar sesión.');
-    }
-  };
-
   const formatHorario = (isoInicio, isoFin) => {
     if (!isoInicio || !isoFin) return 'N/A';
 
@@ -245,14 +237,25 @@ export default function DocenteHomeScreen({ token }) {
     )}`;
   };
 
-  const formatFecha = (isoStr) => {
-    if (!isoStr) return '';
+  const formatFechaCorta = () => {
+    const fecha = new Date();
 
-    return new Date(isoStr).toLocaleDateString('es-EC', {
-      weekday: 'long',
-      day: '2-digit',
-      month: 'long',
+    const diaSemana = fecha.toLocaleDateString('es-EC', {
+      weekday: 'short',
     });
+
+    const dia = fecha.toLocaleDateString('es-EC', {
+      day: '2-digit',
+    });
+
+    const mes = fecha.toLocaleDateString('es-EC', {
+      month: 'short',
+    });
+
+    const diaSemanaLimpio = diaSemana.replace('.', '');
+    const mesLimpio = mes.replace('.', '');
+
+    return `${diaSemanaLimpio} · ${dia} ${mesLimpio}`;
   };
 
   const abrirDetalle = (item) => {
@@ -295,14 +298,22 @@ export default function DocenteHomeScreen({ token }) {
         rol="docente"
         onNotifPress={cargarCronograma}
         onProfilePress={() => router.push('/(docente)/perfil')}
-        onLogoutPress={cerrarSesion}
       />
 
-      <View style={styles.dateStrip}>
-        <Ionicons name="calendar-outline" size={16} color={colors.primary} />
-        <Text style={styles.dateText}>
-          {formatFecha(new Date().toISOString())}
-        </Text>
+      <View style={styles.dateContainer}>
+        <View style={styles.datePill}>
+          <Ionicons
+            name="calendar-clear-outline"
+            size={15}
+            color={colors.primary}
+          />
+
+          <Text style={styles.dateLabel}>Hoy</Text>
+
+          <View style={styles.dateDivider} />
+
+          <Text style={styles.dateText}>{formatFechaCorta()}</Text>
+        </View>
       </View>
 
       <ScrollView
@@ -451,21 +462,43 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
   },
 
-  dateStrip: {
+  dateContainer: {
+    backgroundColor: colors.white,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    alignItems: 'flex-start',
+  },
+
+  datePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    backgroundColor: '#EFF6FF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#BFDBFE',
+    alignSelf: 'flex-start',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    gap: 7,
+  },
+
+  dateLabel: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: colors.primary,
+  },
+
+  dateDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: '#CBD5E1',
   },
 
   dateText: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.bold,
-    color: colors.primary,
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: colors.textSecondary,
     textTransform: 'capitalize',
   },
 
