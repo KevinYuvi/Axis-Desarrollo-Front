@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   TouchableOpacity,
   StatusBar,
-  ActivityIndicator,
   Alert,
   ScrollView,
 } from 'react-native';
@@ -34,6 +33,7 @@ export default function DocenteHomeScreen({ token }) {
   const [claseSeleccionada, setClaseSeleccionada] = useState(null);
   const [proximasClases, setProximasClases] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [yaCargoPrimeraVez, setYaCargoPrimeraVez] = useState(false);
 
   const obtenerTokenValido = async () => {
     const tokenClerk = await getToken({
@@ -73,51 +73,66 @@ export default function DocenteHomeScreen({ token }) {
     return Number.isNaN(tiempo) ? 0 : tiempo;
   };
 
-  const filtrarProximasClases = (clases, claseActiva) => {
-    const ahoraMs = Date.now();
-    const claseActivaId = claseActiva?.reserva?.id;
+const filtrarProximasClases = (clases, claseActiva) => {
+  const ahoraMs = Date.now();
+  const claseActivaId = claseActiva?.reserva?.id;
 
-    return clases
-      .filter((item) => {
-        const reserva = item?.reserva;
+  return clases
+    .filter((item) => {
+      const reserva = item?.reserva;
 
-        if (!reserva?.hora_inicio) {
-          return false;
-        }
+      if (!reserva?.hora_inicio || !reserva?.hora_fin) {
+        return false;
+      }
 
-        if (claseActivaId && reserva.id === claseActivaId) {
-          return false;
-        }
+      if (claseActivaId && reserva.id === claseActivaId) {
+        return false;
+      }
 
-        const inicioMs = obtenerTiempo(reserva.hora_inicio);
-        const finMs = obtenerTiempo(reserva.hora_fin);
+      if (
+        reserva.liberada_anticipadamente === true ||
+        reserva.estado === 'liberada' ||
+        reserva.estado === 'cancelada'
+      ) {
+        return false;
+      }
 
-        if (!inicioMs || !finMs) {
-          return false;
-        }
+      const inicioMs = obtenerTiempo(reserva.hora_inicio);
+      const finMs = obtenerTiempo(reserva.hora_fin);
 
-        return inicioMs > ahoraMs;
-      })
-      .sort((a, b) => {
-        const inicioA = obtenerTiempo(a?.reserva?.hora_inicio);
-        const inicioB = obtenerTiempo(b?.reserva?.hora_inicio);
+      if (!inicioMs || !finMs) {
+        return false;
+      }
 
-        return inicioA - inicioB;
-      });
-  };
+      if (finMs <= ahoraMs) {
+        return false;
+      }
 
-  const cargarCronograma = async () => {
+      if (finMs <= inicioMs) {
+        return false;
+      }
+
+      return inicioMs > ahoraMs;
+    })
+    .sort((a, b) => {
+      const inicioA = obtenerTiempo(a?.reserva?.hora_inicio);
+      const inicioB = obtenerTiempo(b?.reserva?.hora_inicio);
+
+      return inicioA - inicioB;
+    });
+};
+
+  const cargarCronograma = async ({ silencioso = false } = {}) => {
     try {
-      setLoading(true);
+      if (!silencioso) {
+        setLoading(true);
+      }
 
       if (!API_URL) {
         throw new Error('Falta EXPO_PUBLIC_API_URL en el archivo .env.');
       }
 
       const tokenActualizado = await obtenerTokenValido();
-
-      console.log('API_URL DOCENTE:', API_URL);
-      console.log('TOKEN DOCENTE INICIO:', tokenActualizado?.substring(0, 40));
 
       let claseActivaDesdeBackend = null;
 
@@ -135,8 +150,6 @@ export default function DocenteHomeScreen({ token }) {
       if (responseClaseActual.ok) {
         const dataClaseActual = await responseClaseActual.json();
 
-        console.log('DATA MI CLASE ACTUAL:', dataClaseActual);
-
         if (dataClaseActual?.reserva) {
           claseActivaDesdeBackend = dataClaseActual;
           setClaseActual(dataClaseActual);
@@ -144,11 +157,6 @@ export default function DocenteHomeScreen({ token }) {
           setClaseActual(null);
         }
       } else {
-        const errorClaseActual = await responseClaseActual.text();
-
-        console.log('STATUS MI CLASE ACTUAL:', responseClaseActual.status);
-        console.log('ERROR MI CLASE ACTUAL:', errorClaseActual);
-
         setClaseActual(null);
       }
 
@@ -164,11 +172,6 @@ export default function DocenteHomeScreen({ token }) {
       );
 
       if (!responseClasesHoy.ok) {
-        const errorText = await responseClasesHoy.text();
-
-        console.log('STATUS MIS CLASES HOY:', responseClasesHoy.status);
-        console.log('ERROR MIS CLASES HOY:', errorText);
-
         if (responseClasesHoy.status === 401) {
           throw new Error('Tu sesión no es válida o el token fue rechazado.');
         }
@@ -185,16 +188,13 @@ export default function DocenteHomeScreen({ token }) {
       const data = await responseClasesHoy.json();
       const clases = Array.isArray(data) ? data : [];
 
-      console.log('DATA MIS CLASES HOY:', clases);
-
       const siguientes = filtrarProximasClases(
         clases,
         claseActivaDesdeBackend
       );
 
-      console.log('PRÓXIMAS CLASES FILTRADAS:', siguientes);
-
       setProximasClases(siguientes);
+      setYaCargoPrimeraVez(true);
     } catch (error) {
       console.error('Error cargando cronograma:', error);
 
@@ -207,14 +207,15 @@ export default function DocenteHomeScreen({ token }) {
     }
   };
 
-  useEffect(() => {
-    cargarCronograma();
-  }, []);
-
   useFocusEffect(
     useCallback(() => {
-      cargarCronograma();
-    }, [])
+      setPantallaActual('home');
+      setClaseSeleccionada(null);
+
+      cargarCronograma({
+        silencioso: yaCargoPrimeraVez,
+      });
+    }, [yaCargoPrimeraVez])
   );
 
   const formatHorario = (isoInicio, isoFin) => {
@@ -263,6 +264,55 @@ export default function DocenteHomeScreen({ token }) {
     setPantallaActual('detalle');
   };
 
+  const renderSkeleton = () => {
+    return (
+      <View>
+        <View style={styles.skeletonMainCard}>
+          <View style={styles.skeletonHeaderRow}>
+            <View style={styles.skeletonTitleBlock}>
+              <View style={styles.skeletonLineLarge} />
+              <View style={styles.skeletonLineSmall} />
+            </View>
+
+            <View style={styles.skeletonBadge} />
+          </View>
+
+          <View style={styles.skeletonDivider} />
+
+          <View style={styles.skeletonInfoRow}>
+            <View style={styles.skeletonInfoLabel} />
+            <View style={styles.skeletonInfoValue} />
+          </View>
+
+          <View style={styles.skeletonInfoRow}>
+            <View style={styles.skeletonInfoLabel} />
+            <View style={styles.skeletonInfoValueShort} />
+          </View>
+
+          <View style={styles.skeletonHint} />
+        </View>
+
+        <View style={styles.skeletonSectionTitle} />
+
+        {[1, 2, 3].map((item) => (
+          <View key={item} style={styles.skeletonCompactCard}>
+            <View style={styles.skeletonCompactTop}>
+              <View>
+                <View style={styles.skeletonLineMedium} />
+                <View style={styles.skeletonLineSmall} />
+              </View>
+
+              <View style={styles.skeletonCircle} />
+            </View>
+
+            <View style={styles.skeletonLineMediumAlt} />
+            <View style={styles.skeletonLineSmallAlt} />
+          </View>
+        ))}
+      </View>
+    );
+  };
+
   if (pantallaActual === 'detalle') {
     const claseAMostrar = claseSeleccionada || claseActual;
 
@@ -273,7 +323,7 @@ export default function DocenteHomeScreen({ token }) {
         onBack={() => {
           setPantallaActual('home');
           setClaseSeleccionada(null);
-          cargarCronograma();
+          cargarCronograma({ silencioso: true });
         }}
         onReportar={() => setPantallaActual('reporte')}
       />
@@ -296,7 +346,7 @@ export default function DocenteHomeScreen({ token }) {
 
       <AppHeader
         rol="docente"
-        onNotifPress={cargarCronograma}
+        onNotifPress={() => cargarCronograma({ silencioso: false })}
         onProfilePress={() => router.push('/(docente)/perfil')}
       />
 
@@ -334,122 +384,120 @@ export default function DocenteHomeScreen({ token }) {
         </View>
 
         {loading ? (
-          <ActivityIndicator
-            size="large"
-            color={colors.primary}
-            style={{ marginVertical: spacing.lg }}
-          />
-        ) : claseActual ? (
-          <TouchableOpacity
-            activeOpacity={0.85}
-            style={styles.mainCard}
-            onPress={() => abrirDetalle(claseActual)}
-          >
-            <View style={styles.cardHeader}>
-              <View style={styles.cardHeaderText}>
-                <Text style={styles.aulaTitle}>
-                  {claseActual.espacio?.nombre || 'Aula asignada'}
-                </Text>
-
-                <Text style={styles.aulaSub}>
-                  {claseActual.espacio?.ubicacion ||
-                    'Ubicación no registrada'}
-                </Text>
-              </View>
-
-              <View style={styles.statusBadge}>
-                <Text style={styles.statusText}>En curso</Text>
-              </View>
-            </View>
-
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Materia</Text>
-
-              <Text style={styles.infoValue}>
-                {claseActual.reserva?.materia || 'Sin materia'}
-              </Text>
-            </View>
-
-            <View style={styles.infoRowLast}>
-              <Text style={styles.infoLabel}>Horario</Text>
-
-              <Text style={styles.infoValue}>
-                {formatHorario(
-                  claseActual.reserva?.hora_inicio,
-                  claseActual.reserva?.hora_fin
-                )}
-              </Text>
-            </View>
-
-            <View style={styles.tapHint}>
-              <Text style={styles.tapHintText}>Tocar para ver opciones</Text>
-              <Ionicons
-                name="chevron-forward"
-                size={16}
-                color={colors.primary}
-              />
-            </View>
-          </TouchableOpacity>
+          renderSkeleton()
         ) : (
-          <View style={styles.noClassCard}>
-            <Ionicons
-              name="calendar-outline"
-              size={32}
-              color={colors.textMuted}
-            />
+          <>
+            {claseActual ? (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.mainCard}
+                onPress={() => abrirDetalle(claseActual)}
+              >
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardHeaderText}>
+                    <Text style={styles.aulaTitle}>
+                      {claseActual.espacio?.nombre || 'Aula asignada'}
+                    </Text>
 
-            <Text style={styles.noClassText}>
-              No tienes un aula asignada para este horario exacto.
-            </Text>
-          </View>
-        )}
+                    <Text style={styles.aulaSub}>
+                      {claseActual.espacio?.ubicacion ||
+                        'Ubicación no registrada'}
+                    </Text>
+                  </View>
 
-        <Text style={styles.sectionTitle}>Próximas clases de hoy</Text>
+                  <View style={styles.statusBadge}>
+                    <Text style={styles.statusText}>En curso</Text>
+                  </View>
+                </View>
 
-        {loading ? (
-          <ActivityIndicator size="small" color={colors.textMuted} />
-        ) : proximasClases.length > 0 ? (
-          proximasClases.map((item, index) => (
-            <TouchableOpacity
-              key={item.reserva?.id || index}
-              style={styles.compactCard}
-              onPress={() => abrirDetalle(item)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.compactCardTop}>
-                <View style={styles.compactCardLeft}>
-                  <Text style={styles.compactAulaName}>
-                    {item.espacio?.nombre || 'Aula'}
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Materia</Text>
+
+                  <Text style={styles.infoValue}>
+                    {claseActual.reserva?.materia || 'Sin materia'}
                   </Text>
+                </View>
 
-                  <Text style={styles.compactHorario}>
+                <View style={styles.infoRowLast}>
+                  <Text style={styles.infoLabel}>Horario</Text>
+
+                  <Text style={styles.infoValue}>
                     {formatHorario(
-                      item.reserva?.hora_inicio,
-                      item.reserva?.hora_fin
+                      claseActual.reserva?.hora_inicio,
+                      claseActual.reserva?.hora_fin
                     )}
                   </Text>
                 </View>
 
+                <View style={styles.tapHint}>
+                  <Text style={styles.tapHintText}>Tocar para ver opciones</Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={16}
+                    color={colors.primary}
+                  />
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.noClassCard}>
                 <Ionicons
-                  name="chevron-forward"
-                  size={18}
-                  color={colors.textSecondary}
+                  name="calendar-outline"
+                  size={32}
+                  color={colors.textMuted}
                 />
+
+                <Text style={styles.noClassText}>
+                  No tienes un aula asignada para este horario exacto.
+                </Text>
               </View>
+            )}
 
-              <Text style={styles.compactMateria}>
-                {item.reserva?.materia || 'Sin materia'}
-              </Text>
+            <Text style={styles.sectionTitle}>Próximas clases de hoy</Text>
 
-              <Text style={styles.compactUbicacion}>
-                📍 {item.espacio?.ubicacion || 'Ubicación no registrada'}
+            {proximasClases.length > 0 ? (
+              proximasClases.map((item, index) => (
+                <TouchableOpacity
+                  key={item.reserva?.id || index}
+                  style={styles.compactCard}
+                  onPress={() => abrirDetalle(item)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.compactCardTop}>
+                    <View style={styles.compactCardLeft}>
+                      <Text style={styles.compactAulaName}>
+                        {item.espacio?.nombre || 'Aula'}
+                      </Text>
+
+                      <Text style={styles.compactHorario}>
+                        {formatHorario(
+                          item.reserva?.hora_inicio,
+                          item.reserva?.hora_fin
+                        )}
+                      </Text>
+                    </View>
+
+                    <Ionicons
+                      name="chevron-forward"
+                      size={18}
+                      color={colors.textSecondary}
+                    />
+                  </View>
+
+                  <Text style={styles.compactMateria}>
+                    {item.reserva?.materia || 'Sin materia'}
+                  </Text>
+
+                  <Text style={styles.compactUbicacion}>
+                    📍 {item.espacio?.ubicacion || 'Ubicación no registrada'}
+                  </Text>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <Text style={styles.emptyText}>
+                No tienes más clases pendientes para hoy.
               </Text>
-            </TouchableOpacity>
-          ))
-        ) : (
-          <Text style={styles.emptyText}>
-            No tienes más clases pendientes para hoy.
-          </Text>
+            )}
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -710,5 +758,144 @@ const styles = StyleSheet.create({
   compactUbicacion: {
     fontSize: typography.size.xs,
     color: colors.textSecondary,
+  },
+
+  skeletonMainCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+
+  skeletonHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: spacing.sm,
+  },
+
+  skeletonTitleBlock: {
+    flex: 1,
+    paddingRight: spacing.sm,
+  },
+
+  skeletonLineLarge: {
+    width: '76%',
+    height: 22,
+    borderRadius: radius.full,
+    backgroundColor: '#E5E7EB',
+    marginBottom: 8,
+  },
+
+  skeletonLineMedium: {
+    width: 150,
+    height: 15,
+    borderRadius: radius.full,
+    backgroundColor: '#E5E7EB',
+    marginBottom: 8,
+  },
+
+  skeletonLineMediumAlt: {
+    width: '58%',
+    height: 13,
+    borderRadius: radius.full,
+    backgroundColor: '#E5E7EB',
+    marginBottom: 7,
+  },
+
+  skeletonLineSmall: {
+    width: 100,
+    height: 12,
+    borderRadius: radius.full,
+    backgroundColor: '#E5E7EB',
+  },
+
+  skeletonLineSmallAlt: {
+    width: '42%',
+    height: 12,
+    borderRadius: radius.full,
+    backgroundColor: '#E5E7EB',
+  },
+
+  skeletonBadge: {
+    width: 72,
+    height: 26,
+    borderRadius: radius.full,
+    backgroundColor: '#E5E7EB',
+  },
+
+  skeletonDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.sm,
+  },
+
+  skeletonInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+  },
+
+  skeletonInfoLabel: {
+    width: 80,
+    height: 13,
+    borderRadius: radius.full,
+    backgroundColor: '#E5E7EB',
+  },
+
+  skeletonInfoValue: {
+    width: 140,
+    height: 13,
+    borderRadius: radius.full,
+    backgroundColor: '#E5E7EB',
+  },
+
+  skeletonInfoValueShort: {
+    width: 95,
+    height: 13,
+    borderRadius: radius.full,
+    backgroundColor: '#E5E7EB',
+  },
+
+  skeletonHint: {
+    alignSelf: 'flex-end',
+    width: 120,
+    height: 13,
+    borderRadius: radius.full,
+    backgroundColor: '#E5E7EB',
+    marginTop: spacing.xs,
+  },
+
+  skeletonSectionTitle: {
+    width: 150,
+    height: 18,
+    borderRadius: radius.full,
+    backgroundColor: '#E5E7EB',
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+
+  skeletonCompactCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+
+  skeletonCompactTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+
+  skeletonCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#E5E7EB',
   },
 });

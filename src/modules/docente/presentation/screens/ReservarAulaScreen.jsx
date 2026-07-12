@@ -7,7 +7,6 @@ import {
   FlatList,
   StatusBar,
   ActivityIndicator,
-  Alert,
   ScrollView,
   Modal,
 } from 'react-native';
@@ -37,11 +36,40 @@ export default function ReservarAulaScreen({ token, onBack }) {
   const [modalHoraInicioVisible, setModalHoraInicioVisible] = useState(false);
   const [modalHoraFinVisible, setModalHoraFinVisible] = useState(false);
 
+  const [modalFeedbackVisible, setModalFeedbackVisible] = useState(false);
+  const [feedbackTipo, setFeedbackTipo] = useState('info');
+  const [feedbackTitulo, setFeedbackTitulo] = useState('');
+  const [feedbackMensaje, setFeedbackMensaje] = useState('');
+  const [feedbackAccion, setFeedbackAccion] = useState(null);
+
   useEffect(() => {
     if (token) {
       cargarEspacios();
     }
   }, [token]);
+
+  const mostrarFeedback = ({
+    tipo = 'info',
+    titulo,
+    mensaje,
+    accion = null,
+  }) => {
+    setFeedbackTipo(tipo);
+    setFeedbackTitulo(titulo);
+    setFeedbackMensaje(mensaje);
+    setFeedbackAccion(() => accion);
+    setModalFeedbackVisible(true);
+  };
+
+  const cerrarFeedback = () => {
+    setModalFeedbackVisible(false);
+
+    if (feedbackAccion) {
+      feedbackAccion();
+    }
+
+    setFeedbackAccion(null);
+  };
 
   const cargarEspacios = async () => {
     try {
@@ -72,7 +100,12 @@ export default function ReservarAulaScreen({ token, onBack }) {
       setEspacios(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error cargando espacios:', error);
-      Alert.alert('Error', error.message || 'No se pudieron cargar las aulas.');
+
+      mostrarFeedback({
+        tipo: 'error',
+        titulo: 'Error',
+        mensaje: error.message || 'No se pudieron cargar las aulas.',
+      });
     } finally {
       setLoadingEspacios(false);
     }
@@ -129,7 +162,11 @@ export default function ReservarAulaScreen({ token, onBack }) {
 
   const crearReserva = async () => {
     if (!espacioSeleccionado || !fechaSeleccionada || !horaInicio || !horaFin) {
-      Alert.alert('Incompleto', 'Debes seleccionar aula, fecha y horario.');
+      mostrarFeedback({
+        tipo: 'warning',
+        titulo: 'Datos incompletos',
+        mensaje: 'Selecciona aula, fecha y horario para continuar.',
+      });
       return;
     }
 
@@ -137,15 +174,24 @@ export default function ReservarAulaScreen({ token, onBack }) {
     const finMinutos = convertirMinutos(horaFin);
 
     if (finMinutos <= inicioMinutos) {
-      Alert.alert(
-        'Horario inválido',
-        'La hora de fin debe ser posterior a la hora de inicio.'
-      );
+      mostrarFeedback({
+        tipo: 'warning',
+        titulo: 'Horario inválido',
+        mensaje: 'La hora de fin debe ser posterior a la hora de inicio.',
+      });
       return;
     }
 
     try {
       setGuardando(true);
+
+      if (!API_URL) {
+        throw new Error('Falta EXPO_PUBLIC_API_URL en el archivo .env.');
+      }
+
+      if (!token) {
+        throw new Error('No se encontró el token de sesión.');
+      }
 
       const bodyData = {
         espacio_id: espacioSeleccionado.id,
@@ -153,8 +199,6 @@ export default function ReservarAulaScreen({ token, onBack }) {
         hora_inicio: construirFechaHoraLocal(fechaSeleccionada, horaInicio),
         hora_fin: construirFechaHoraLocal(fechaSeleccionada, horaFin),
       };
-
-      console.log('BODY RESERVA:', bodyData);
 
       const response = await fetch(`${API_URL}/api/v1/reservas/`, {
         method: 'POST',
@@ -172,15 +216,20 @@ export default function ReservarAulaScreen({ token, onBack }) {
         throw new Error(data?.detail || 'No se pudo crear la reserva.');
       }
 
-      Alert.alert('Éxito', 'La reserva fue creada exitosamente.', [
-        {
-          text: 'OK',
-          onPress: onBack,
-        },
-      ]);
+      mostrarFeedback({
+        tipo: 'success',
+        titulo: 'Reserva creada',
+        mensaje: 'El aula fue reservada correctamente.',
+        accion: onBack,
+      });
     } catch (error) {
       console.error('Error creando reserva:', error);
-      Alert.alert('Error', error.message || 'Ocurrió un error al reservar.');
+
+      mostrarFeedback({
+        tipo: 'error',
+        titulo: 'No se pudo reservar',
+        mensaje: error.message || 'Ocurrió un error al crear la reserva.',
+      });
     } finally {
       setGuardando(false);
     }
@@ -193,13 +242,11 @@ export default function ReservarAulaScreen({ token, onBack }) {
         setEspacioSeleccionado(item);
         setModalAulasVisible(false);
       }}
+      activeOpacity={0.85}
     >
-      <Ionicons
-        name="business"
-        size={24}
-        color={colors.primary}
-        style={{ marginRight: spacing.sm }}
-      />
+      <View style={styles.optionIconBox}>
+        <Ionicons name="business-outline" size={21} color={colors.primary} />
+      </View>
 
       <View style={{ flex: 1 }}>
         <Text style={styles.optionTitle}>{item.nombre}</Text>
@@ -222,13 +269,11 @@ export default function ReservarAulaScreen({ token, onBack }) {
         setFechaSeleccionada(item);
         setModalFechaVisible(false);
       }}
+      activeOpacity={0.85}
     >
-      <Ionicons
-        name="calendar-outline"
-        size={22}
-        color={colors.primary}
-        style={{ marginRight: spacing.sm }}
-      />
+      <View style={styles.optionIconBox}>
+        <Ionicons name="calendar-outline" size={21} color={colors.primary} />
+      </View>
 
       <Text style={styles.optionTitle}>{item}</Text>
     </TouchableOpacity>
@@ -245,13 +290,11 @@ export default function ReservarAulaScreen({ token, onBack }) {
           setHoraFin(null);
         }
       }}
+      activeOpacity={0.85}
     >
-      <Ionicons
-        name="time-outline"
-        size={22}
-        color={colors.primary}
-        style={{ marginRight: spacing.sm }}
-      />
+      <View style={styles.optionIconBox}>
+        <Ionicons name="time-outline" size={21} color={colors.primary} />
+      </View>
 
       <Text style={styles.optionTitle}>{item}</Text>
     </TouchableOpacity>
@@ -265,23 +308,22 @@ export default function ReservarAulaScreen({ token, onBack }) {
           horaInicio &&
           convertirMinutos(item) <= convertirMinutos(horaInicio)
         ) {
-          Alert.alert(
-            'Horario inválido',
-            'La hora de fin debe ser posterior a la hora de inicio.'
-          );
+          mostrarFeedback({
+            tipo: 'warning',
+            titulo: 'Horario inválido',
+            mensaje: 'La hora de fin debe ser posterior a la hora de inicio.',
+          });
           return;
         }
 
         setHoraFin(item);
         setModalHoraFinVisible(false);
       }}
+      activeOpacity={0.85}
     >
-      <Ionicons
-        name="time-outline"
-        size={22}
-        color={colors.primary}
-        style={{ marginRight: spacing.sm }}
-      />
+      <View style={styles.optionIconBox}>
+        <Ionicons name="time-outline" size={21} color={colors.primary} />
+      </View>
 
       <Text style={styles.optionTitle}>{item}</Text>
     </TouchableOpacity>
@@ -296,9 +338,14 @@ export default function ReservarAulaScreen({ token, onBack }) {
           <Ionicons name="arrow-back" size={22} color={colors.primary} />
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>Nueva Reserva</Text>
+        <View style={styles.headerTextBox}>
+          <Text style={styles.headerTitle}>Nueva reserva</Text>
+          <Text style={styles.headerSubtitle}>Agendar aula</Text>
+        </View>
 
-        <View style={styles.headerSpacer} />
+        <View style={styles.headerIconBox}>
+          <Ionicons name="calendar-outline" size={19} color={colors.primary} />
+        </View>
       </View>
 
       <ScrollView
@@ -306,15 +353,23 @@ export default function ReservarAulaScreen({ token, onBack }) {
         contentContainerStyle={styles.scrollInner}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.mainTitle}>Agendar Aula</Text>
-
         <View style={styles.formCard}>
-          <Text style={styles.formTitle}>Detalles de la Reserva</Text>
+          <View style={styles.formHeader}>
+            <View>
+              <Text style={styles.formTitle}>Detalles de la reserva</Text>
+              <Text style={styles.formSubtitle}>
+                Selecciona espacio, fecha y horario.
+              </Text>
+            </View>
+          </View>
 
           <Text style={styles.inputLabel}>Materia</Text>
 
           <View style={styles.selectBox}>
-            <Text style={styles.selectText}>{materia}</Text>
+            <View style={styles.selectTextBox}>
+              <Text style={styles.selectText}>{materia}</Text>
+            </View>
+
             <Ionicons
               name="book-outline"
               size={20}
@@ -328,20 +383,22 @@ export default function ReservarAulaScreen({ token, onBack }) {
             style={styles.selectBox}
             onPress={() => setModalAulasVisible(true)}
             disabled={loadingEspacios}
+            activeOpacity={0.85}
           >
-            <View style={{ flex: 1 }}>
+            <View style={styles.selectTextBox}>
               <Text
                 style={[
                   styles.selectText,
                   !espacioSeleccionado && styles.placeholderText,
                 ]}
+                numberOfLines={1}
               >
                 {espacioSeleccionado?.nombre || 'Seleccionar espacio'}
               </Text>
 
               {espacioSeleccionado && (
-                <Text style={styles.selectSubText}>
-                  Cap. {espacioSeleccionado.capacidad} |{' '}
+                <Text style={styles.selectSubText} numberOfLines={1}>
+                  Cap. {espacioSeleccionado.capacidad} ·{' '}
                   {espacioSeleccionado.estado_actual}
                 </Text>
               )}
@@ -363,6 +420,7 @@ export default function ReservarAulaScreen({ token, onBack }) {
           <TouchableOpacity
             style={styles.selectBox}
             onPress={() => setModalFechaVisible(true)}
+            activeOpacity={0.85}
           >
             <Text
               style={[
@@ -387,6 +445,7 @@ export default function ReservarAulaScreen({ token, onBack }) {
               <TouchableOpacity
                 style={styles.selectBox}
                 onPress={() => setModalHoraInicioVisible(true)}
+                activeOpacity={0.85}
               >
                 <Text
                   style={[
@@ -411,6 +470,7 @@ export default function ReservarAulaScreen({ token, onBack }) {
               <TouchableOpacity
                 style={styles.selectBox}
                 onPress={() => setModalHoraFinVisible(true)}
+                activeOpacity={0.85}
               >
                 <Text
                   style={[
@@ -434,11 +494,15 @@ export default function ReservarAulaScreen({ token, onBack }) {
             style={[styles.submitBtn, guardando && styles.disabledBtn]}
             onPress={crearReserva}
             disabled={guardando}
+            activeOpacity={0.85}
           >
             {guardando ? (
               <ActivityIndicator size="small" color={colors.white} />
             ) : (
-              <Text style={styles.submitBtnText}>Confirmar reserva</Text>
+              <>
+                <Text style={styles.submitBtnText}>Confirmar reserva</Text>
+                <Ionicons name="checkmark-circle-outline" size={18} color={colors.white} />
+              </>
             )}
           </TouchableOpacity>
         </View>
@@ -479,6 +543,14 @@ export default function ReservarAulaScreen({ token, onBack }) {
         renderItem={renderHoraFin}
         emptyText="No hay horas disponibles."
       />
+
+      <FeedbackModal
+        visible={modalFeedbackVisible}
+        tipo={feedbackTipo}
+        titulo={feedbackTitulo}
+        mensaje={feedbackMensaje}
+        onClose={cerrarFeedback}
+      />
     </SafeAreaView>
   );
 }
@@ -491,13 +563,15 @@ function SelectorModal({ visible, title, onClose, data, renderItem, emptyText })
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
+      <View style={styles.modalOverlayBottom}>
         <View style={styles.modalContent}>
+          <View style={styles.modalHandle} />
+
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{title}</Text>
 
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color={colors.textPrimary} />
+            <TouchableOpacity style={styles.modalCloseBtn} onPress={onClose}>
+              <Ionicons name="close" size={20} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
 
@@ -529,6 +603,70 @@ function SelectorModal({ visible, title, onClose, data, renderItem, emptyText })
   );
 }
 
+function FeedbackModal({ visible, tipo, titulo, mensaje, onClose }) {
+  const config = {
+    success: {
+      icon: 'checkmark-circle-outline',
+      color: '#16A34A',
+      bg: '#DCFCE7',
+      button: colors.primary,
+      label: 'Aceptar',
+    },
+    error: {
+      icon: 'alert-circle-outline',
+      color: '#DC2626',
+      bg: '#FEF2F2',
+      button: '#DC2626',
+      label: 'Entendido',
+    },
+    warning: {
+      icon: 'warning-outline',
+      color: '#D97706',
+      bg: '#FEF3C7',
+      button: '#D97706',
+      label: 'Entendido',
+    },
+    info: {
+      icon: 'information-circle-outline',
+      color: colors.primary,
+      bg: '#EFF6FF',
+      button: colors.primary,
+      label: 'Aceptar',
+    },
+  };
+
+  const item = config[tipo] || config.info;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={styles.feedbackOverlay}>
+        <View style={styles.feedbackCard}>
+          <View style={[styles.feedbackIconBox, { backgroundColor: item.bg }]}>
+            <Ionicons name={item.icon} size={32} color={item.color} />
+          </View>
+
+          <Text style={styles.feedbackTitle}>{titulo}</Text>
+
+          <Text style={styles.feedbackMessage}>{mensaje}</Text>
+
+          <TouchableOpacity
+            style={[styles.feedbackBtn, { backgroundColor: item.button }]}
+            onPress={onClose}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.feedbackBtnText}>{item.label}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -538,7 +676,6 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     backgroundColor: colors.white,
@@ -547,7 +684,17 @@ const styles = StyleSheet.create({
   },
 
   backBtn: {
-    padding: spacing.xs,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+
+  headerTextBox: {
+    flex: 1,
   },
 
   headerTitle: {
@@ -556,8 +703,19 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
 
-  headerSpacer: {
-    width: 32,
+  headerSubtitle: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+
+  headerIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   scrollContent: {
@@ -566,15 +724,8 @@ const styles = StyleSheet.create({
 
   scrollInner: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
+    paddingTop: spacing.lg,
     paddingBottom: spacing.xxl,
-  },
-
-  mainTitle: {
-    fontSize: typography.size.xl,
-    fontWeight: typography.weight.bold,
-    color: colors.textPrimary,
-    marginBottom: spacing.lg,
   },
 
   formCard: {
@@ -585,11 +736,20 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
 
+  formHeader: {
+    marginBottom: spacing.md,
+  },
+
   formTitle: {
     fontSize: typography.size.md,
     fontWeight: typography.weight.bold,
     color: colors.textPrimary,
-    marginBottom: spacing.lg,
+  },
+
+  formSubtitle: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    marginTop: 4,
   },
 
   inputLabel: {
@@ -614,6 +774,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+
+  selectTextBox: {
+    flex: 1,
+    paddingRight: spacing.sm,
   },
 
   selectText: {
@@ -643,11 +808,14 @@ const styles = StyleSheet.create({
   },
 
   submitBtn: {
+    minHeight: 54,
     backgroundColor: colors.primary,
     borderRadius: radius.md,
-    paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 8,
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
 
   submitBtnText: {
@@ -660,9 +828,9 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
 
-  modalOverlay: {
+  modalOverlayBottom: {
     flex: 1,
-    backgroundColor: 'rgba(17, 24, 39, 0.45)',
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
     justifyContent: 'flex-end',
     alignItems: 'center',
   },
@@ -672,11 +840,20 @@ const styles = StyleSheet.create({
     maxWidth: 430,
     maxHeight: '72%',
     backgroundColor: colors.white,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     paddingHorizontal: 18,
-    paddingTop: 16,
+    paddingTop: 10,
     paddingBottom: 24,
+  },
+
+  modalHandle: {
+    width: 42,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#CBD5E1',
+    alignSelf: 'center',
+    marginBottom: spacing.md,
   },
 
   modalHeader: {
@@ -692,6 +869,15 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
 
+  modalCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   optionCard: {
     backgroundColor: colors.background,
     borderWidth: 1,
@@ -701,6 +887,16 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
+  },
+
+  optionIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
   },
 
   optionTitle: {
@@ -724,5 +920,62 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textSecondary,
     marginTop: 8,
+  },
+
+  feedbackOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+
+  feedbackCard: {
+    width: '100%',
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+
+  feedbackIconBox: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+
+  feedbackTitle: {
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.bold,
+    color: colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+
+  feedbackMessage: {
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: spacing.lg,
+  },
+
+  feedbackBtn: {
+    width: '100%',
+    minHeight: 48,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  feedbackBtnText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.white,
   },
 });

@@ -14,10 +14,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
 import { AppHeader } from '../../../../shared/components';
+
 import {
   AudioModule,
   RecordingPresets,
@@ -35,7 +37,7 @@ const preguntasRapidas = [
   'El proyector del Laboratorio 3 no enciende.',
 ];
 
-export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol }) {
+export default function AsistenteIAScreen({ token, onBack, rol }) {
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(audioRecorder);
 
@@ -46,13 +48,14 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol })
   const [enviando, setEnviando] = useState(false);
   const [segundosGrabando, setSegundosGrabando] = useState(0);
   const [audioUri, setAudioUri] = useState(null);
+  const [mostrarRapidas, setMostrarRapidas] = useState(false);
 
   const [mensajes, setMensajes] = useState([
     {
       id: 'inicio',
       tipo: 'ia',
       texto:
-        'Hola, soy tu asistente de Axis. Puedes escribirme o enviarme un audio de máximo 1 minuto.',
+        'Hola, soy tu asistente de Axis. Puedes escribirme o enviarme un audio.',
     },
   ]);
 
@@ -101,6 +104,7 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol })
 
   const iniciarGrabacion = async () => {
     try {
+      setTexto('');
       setAudioUri(null);
       setSegundosGrabando(0);
 
@@ -112,7 +116,7 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol })
           const nuevoValor = prev + 1;
 
           if (nuevoValor >= 60) {
-            detenerGrabacion(true);
+            detenerGrabacion(false);
             return 60;
           }
 
@@ -125,7 +129,7 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol })
     }
   };
 
-  const detenerGrabacion = async (autoEnviar = false) => {
+  const detenerGrabacion = async () => {
     try {
       limpiarTemporizador();
 
@@ -138,16 +142,16 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol })
         return;
       }
 
-      if (autoEnviar) {
-        await enviarSolicitud('', uri, 60);
-        return;
-      }
-
       setAudioUri(uri);
     } catch (error) {
       console.error('Error deteniendo grabación:', error);
       Alert.alert('Error', 'No se pudo detener la grabación.');
     }
+  };
+
+  const cancelarAudio = () => {
+    setAudioUri(null);
+    setSegundosGrabando(0);
   };
 
   const formatearTiempo = (segundos) => {
@@ -167,7 +171,20 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol })
     ]);
   };
 
-  const enviarTexto = async () => {
+  const enviarDesdeInput = async () => {
+    if (enviando) return;
+
+    if (audioUri) {
+      const uriEnviar = audioUri;
+      const duracionEnviar = segundosGrabando;
+
+      setAudioUri(null);
+      setSegundosGrabando(0);
+
+      await enviarSolicitud('', uriEnviar, duracionEnviar);
+      return;
+    }
+
     if (!texto.trim()) return;
 
     const textoEnviar = texto.trim();
@@ -176,28 +193,26 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol })
     await enviarSolicitud(textoEnviar, null, null);
   };
 
-  const enviarAudioManual = async () => {
-    if (!audioUri) {
-      Alert.alert('Sin audio', 'Primero graba un audio.');
-      return;
-    }
-
-    const uriEnviar = audioUri;
-    const duracionEnviar = segundosGrabando;
-
-    setAudioUri(null);
-    setSegundosGrabando(0);
-
-    await enviarSolicitud('', uriEnviar, duracionEnviar);
-  };
-
   const enviarPreguntaRapida = async (pregunta) => {
+    setMostrarRapidas(false);
     await enviarSolicitud(pregunta, null, null);
   };
 
-  const enviarSolicitud = async (textoEnviar = '', uriAudio = null, duracion = null) => {
+  const enviarSolicitud = async (
+    textoEnviar = '',
+    uriAudio = null,
+    duracion = null
+  ) => {
     try {
       setEnviando(true);
+
+      if (!API_URL) {
+        throw new Error('Falta EXPO_PUBLIC_API_URL en el archivo .env.');
+      }
+
+      if (!token) {
+        throw new Error('No se encontró el token de sesión.');
+      }
 
       if (textoEnviar) {
         agregarMensaje({
@@ -211,12 +226,9 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol })
 
         agregarMensaje({
           tipo: 'usuario',
-          texto: `Audio enviado (${formatearTiempo(duracionMostrada)})`,
+          texto: `Audio (${formatearTiempo(duracionMostrada)})`,
           esAudio: true,
         });
-
-        setAudioUri(null);
-        setSegundosGrabando(0);
       }
 
       const formData = new FormData();
@@ -237,7 +249,7 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol })
           type: tipoArchivo,
         });
 
-        formData.append('duracion_segundos', String(duracion || segundosGrabando || 0));
+        formData.append('duracion_segundos', String(duracion || 0));
       }
 
       const response = await fetch(`${API_URL}/api/v1/ia/procesar-solicitud`, {
@@ -285,7 +297,7 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol })
       >
         {!esUsuario && (
           <View style={styles.botAvatar}>
-            <Ionicons name="sparkles" size={18} color="#FFFFFF" />
+            <Ionicons name="hardware-chip-outline" size={18} color="#FFFFFF" />
           </View>
         )}
 
@@ -296,14 +308,32 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol })
             item.error && styles.errorBubble,
           ]}
         >
-          <Text
-            style={[
-              styles.messageText,
-              esUsuario ? styles.userText : styles.iaText,
-            ]}
-          >
-            {item.texto}
-          </Text>
+          {item.esAudio ? (
+            <View style={styles.audioMessageRow}>
+              <Ionicons
+                name="mic-outline"
+                size={16}
+                color={esUsuario ? colors.white : colors.primary}
+              />
+              <Text
+                style={[
+                  styles.messageText,
+                  esUsuario ? styles.userText : styles.iaText,
+                ]}
+              >
+                {item.texto}
+              </Text>
+            </View>
+          ) : (
+            <Text
+              style={[
+                styles.messageText,
+                esUsuario ? styles.userText : styles.iaText,
+              ]}
+            >
+              {item.texto}
+            </Text>
+          )}
 
           {item.detalle?.aula_identificada && (
             <View style={styles.resultCard}>
@@ -326,6 +356,7 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol })
               )}
             </View>
           )}
+
           {item.detalle?.status === 'pendiente_confirmacion' &&
             item.detalle?.accion === 'RESERVA' && (
               <View style={styles.confirmActions}>
@@ -348,7 +379,6 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol })
                 </TouchableOpacity>
               </View>
             )}
-
         </View>
       </View>
     );
@@ -360,14 +390,75 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol })
     return (
       <View style={[styles.messageRow, styles.messageRowIA]}>
         <View style={styles.botAvatar}>
-          <Ionicons name="sparkles" size={18} color={colors.white} />
+          <Ionicons name="hardware-chip-outline" size={18} color={colors.white} />
         </View>
 
         <View style={[styles.messageBubble, styles.iaBubble, styles.typingBubble]}>
           <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={styles.typingText}>...</Text>
+          <Text style={styles.typingText}>Procesando...</Text>
         </View>
       </View>
+    );
+  };
+
+  const puedeEnviar =
+    !enviando &&
+    !recorderState.isRecording &&
+    (texto.trim().length > 0 || Boolean(audioUri));
+
+  const renderInputPrincipal = () => {
+    if (recorderState.isRecording) {
+      return (
+        <View style={styles.audioInputCard}>
+          <View style={styles.recordingInfo}>
+            <View style={styles.recordingDot} />
+
+            <View style={styles.audioInfoTextBox}>
+              <Text style={styles.audioTitle}>Grabando audio</Text>
+              <Text style={styles.audioSubtitle}>
+                {formatearTiempo(segundosGrabando)} / 01:00
+              </Text>
+            </View>
+          </View>
+        </View>
+      );
+    }
+
+    if (audioUri) {
+      return (
+        <View style={styles.audioInputCard}>
+          <View style={styles.audioReadyIcon}>
+            <Ionicons name="mic-outline" size={18} color={colors.primary} />
+          </View>
+
+          <View style={styles.audioInfoTextBox}>
+            <Text style={styles.audioTitle}>Audio listo</Text>
+            <Text style={styles.audioSubtitle}>
+              {formatearTiempo(segundosGrabando)}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.clearAudioBtn}
+            onPress={cancelarAudio}
+            disabled={enviando}
+          >
+            <Ionicons name="close" size={18} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <TextInput
+        style={styles.input}
+        placeholder="Escribe tu consulta..."
+        placeholderTextColor={colors.textMuted}
+        value={texto}
+        onChangeText={setTexto}
+        multiline
+        editable={!enviando}
+      />
     );
   };
 
@@ -375,19 +466,28 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol })
     <SafeAreaView style={styles.screen} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
 
-      {/* Si viene del tab (sin onBack) → cabecera AXIS estándar */}
-      {/* Si viene como sub-pantalla (con onBack) → cabecera con botón atrás */}
       {onBack ? (
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backBtn} onPress={onBack} accessibilityLabel="Volver">
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={onBack}
+            accessibilityLabel="Volver"
+          >
             <Ionicons name="arrow-back" size={22} color={colors.primary} />
           </TouchableOpacity>
+
           <View style={styles.headerBrand}>
             <View style={styles.headerIcon}>
-              <Ionicons name="sparkles" size={16} color={colors.white} />
+              <Ionicons
+                name="hardware-chip-outline"
+                size={17}
+                color={colors.white}
+              />
             </View>
+
             <Text style={styles.headerTitle}>Asistente IA</Text>
           </View>
+
           <View style={styles.headerSpacer} />
         </View>
       ) : (
@@ -398,26 +498,6 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol })
         style={styles.body}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.quickSection}>
-          <Text style={styles.quickTitle}>Preguntas rápidas</Text>
-          <FlatList
-            data={preguntasRapidas}
-            keyExtractor={(item) => item}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.quickList}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.quickChip}
-                onPress={() => enviarPreguntaRapida(item)}
-                disabled={enviando}
-              >
-                <Text style={styles.quickChipText}>{item}</Text>
-              </TouchableOpacity>
-            )}
-          />
-        </View>
-
         <FlatList
           ref={flatListRef}
           data={mensajes}
@@ -428,49 +508,84 @@ export default function AsistenteIAScreen({ token, onBack, onVerReportes, rol })
           showsVerticalScrollIndicator={false}
         />
 
-        {recorderState.isRecording && (
-          <View style={styles.recordingBar}>
-            <View style={styles.recordingDot} />
-            <Text style={styles.recordingText}>Grabando {formatearTiempo(segundosGrabando)} / 01:00</Text>
-          </View>
-        )}
+        {mostrarRapidas && (
+          <View style={styles.quickPanel}>
+            <View style={styles.quickHeader}>
+              <Text style={styles.quickTitle}>Preguntas rápidas</Text>
 
-        {audioUri && !recorderState.isRecording && !enviando && (
-          <View style={styles.audioReadyBar}>
-            <Ionicons name="mic" size={18} color={colors.primary} />
-            <Text style={styles.audioReadyText}>Audio listo ({formatearTiempo(segundosGrabando)})</Text>
-            <TouchableOpacity onPress={enviarAudioManual}>
-              <Text style={styles.audioSendText}>Enviar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.audioCancelBtn} onPress={() => { setAudioUri(null); setSegundosGrabando(0); }}>
-              <Ionicons name="close" size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
+              <TouchableOpacity onPress={() => setMostrarRapidas(false)}>
+                <Ionicons
+                  name="close"
+                  size={18}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={preguntasRapidas}
+              keyExtractor={(item) => item}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.quickList}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.quickChip}
+                  onPress={() => enviarPreguntaRapida(item)}
+                  disabled={enviando}
+                >
+                  <Text style={styles.quickChipText}>{item}</Text>
+                </TouchableOpacity>
+              )}
+            />
           </View>
         )}
 
         <View style={styles.inputArea}>
           <TouchableOpacity
-            style={[styles.micBtn, recorderState.isRecording && styles.micBtnRecording]}
-            onPress={recorderState.isRecording ? () => detenerGrabacion(false) : iniciarGrabacion}
-            disabled={enviando}
+            style={[
+              styles.roundBtn,
+              styles.quickBtn,
+              mostrarRapidas && styles.quickBtnActive,
+            ]}
+            onPress={() => setMostrarRapidas((prev) => !prev)}
+            disabled={enviando || recorderState.isRecording}
           >
-            <Ionicons name={recorderState.isRecording ? 'stop' : 'mic-outline'} size={22} color={colors.white} />
+            <Ionicons
+              name="flash-outline"
+              size={21}
+              color={mostrarRapidas ? colors.white : colors.primary}
+            />
           </TouchableOpacity>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Escribe tu consulta..."
-            placeholderTextColor={colors.textMuted}
-            value={texto}
-            onChangeText={setTexto}
-            multiline
-            editable={!enviando && !recorderState.isRecording}
-          />
+          <TouchableOpacity
+            style={[
+              styles.roundBtn,
+              styles.micBtn,
+              recorderState.isRecording && styles.micBtnRecording,
+            ]}
+            onPress={
+              recorderState.isRecording ? detenerGrabacion : iniciarGrabacion
+            }
+            disabled={enviando || Boolean(audioUri)}
+          >
+            <Ionicons
+              name={recorderState.isRecording ? 'stop' : 'mic-outline'}
+              size={22}
+              color={colors.white}
+            />
+          </TouchableOpacity>
+
+          <View style={styles.inputCenter}>{renderInputPrincipal()}</View>
 
           <TouchableOpacity
-            style={[styles.sendBtn, (!texto.trim() || enviando) && styles.sendBtnDisabled]}
-            onPress={enviarTexto}
-            disabled={!texto.trim() || enviando}
+            style={[
+              styles.roundBtn,
+              styles.sendBtn,
+              !puedeEnviar && styles.sendBtnDisabled,
+            ]}
+            onPress={enviarDesdeInput}
+            disabled={!puedeEnviar}
           >
             <Ionicons name="send" size={18} color={colors.white} />
           </TouchableOpacity>
@@ -485,6 +600,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.white,
   },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -494,132 +610,131 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+
   backBtn: {
-    padding: spacing.xs,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: spacing.sm,
   },
+
   headerBrand: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
+
   headerIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: radius.sm,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
+
   headerTitle: {
     fontSize: typography.size.md,
     fontWeight: typography.weight.bold,
     color: colors.textPrimary,
   },
+
   headerSpacer: {
-    width: 30,
+    width: 38,
   },
+
   body: {
     flex: 1,
-  },
-  quickSection: {
     backgroundColor: colors.background,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
-  quickTitle: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    fontWeight: typography.weight.bold,
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    marginBottom: spacing.sm,
-    paddingHorizontal: spacing.lg,
-  },
-  quickList: {
-    paddingHorizontal: spacing.lg,
-  },
-  quickChip: {
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginRight: spacing.sm,
-    maxWidth: 260,
-  },
-  quickChipText: {
-    fontSize: typography.size.sm,
-    color: colors.textPrimary,
-    fontWeight: typography.weight.bold,
-  },
+
   messagesContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
-    paddingBottom: spacing.sm,
+    paddingBottom: spacing.lg,
   },
+
   messageRow: {
     flexDirection: 'row',
     marginBottom: spacing.md,
   },
+
   messageRowIA: {
     justifyContent: 'flex-start',
   },
+
   messageRowUser: {
     justifyContent: 'flex-end',
   },
+
   botAvatar: {
     width: 34,
     height: 34,
-    borderRadius: radius.sm,
+    borderRadius: 17,
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: spacing.sm,
     marginTop: 2,
   },
+
   messageBubble: {
     maxWidth: '78%',
     borderRadius: 18,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
+
   iaBubble: {
     backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.border,
   },
+
   userBubble: {
     backgroundColor: colors.primary,
   },
+
   errorBubble: {
     borderColor: '#FCA5A5',
     backgroundColor: colors.dangerBg,
   },
+
+  messageText: {
+    fontSize: typography.size.sm,
+    lineHeight: 20,
+  },
+
+  iaText: {
+    color: colors.textPrimary,
+  },
+
+  userText: {
+    color: colors.white,
+  },
+
+  audioMessageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+
   typingBubble: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+
   typingText: {
     fontSize: typography.size.sm,
     color: colors.textSecondary,
     fontWeight: typography.weight.bold,
     marginLeft: spacing.sm,
   },
-  messageText: {
-    fontSize: typography.size.sm,
-    lineHeight: 20,
-  },
-  iaText: {
-    color: colors.textPrimary,
-  },
-  userText: {
-    color: colors.white,
-  },
+
   resultCard: {
     backgroundColor: colors.background,
     borderWidth: 1,
@@ -628,16 +743,19 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     marginTop: spacing.sm,
   },
+
   resultTitle: {
     fontSize: typography.size.sm,
     fontWeight: typography.weight.bold,
     color: colors.textPrimary,
   },
+
   resultSub: {
     fontSize: typography.size.xs,
     color: colors.textSecondary,
     marginTop: 3,
   },
+
   statusMiniBadge: {
     alignSelf: 'flex-start',
     backgroundColor: '#D1FAE5',
@@ -646,62 +764,100 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     marginTop: spacing.sm,
   },
+
   statusMiniText: {
     fontSize: 11,
     color: '#047857',
     fontWeight: typography.weight.bold,
   },
-  recordingBar: {
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
+
+  confirmActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+
+  confirmYesBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: radius.full,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+
+  confirmYesText: {
+    color: colors.white,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    marginLeft: 5,
+  },
+
+  confirmNoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.dangerBg,
     borderWidth: 1,
     borderColor: '#FCA5A5',
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  recordingDot: {
-    width: 9,
-    height: 9,
     borderRadius: radius.full,
-    backgroundColor: colors.danger,
-    marginRight: spacing.sm,
-  },
-  recordingText: {
-    fontSize: typography.size.sm,
-    color: '#991B1B',
-    fontWeight: typography.weight.bold,
-  },
-  audioReadyBar: {
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+
+  confirmNoText: {
+    color: colors.danger,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    marginLeft: 5,
+  },
+
+  quickPanel: {
+    backgroundColor: colors.white,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+
+  quickHeader: {
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  audioReadyText: {
-    flex: 1,
-    marginLeft: spacing.sm,
+
+  quickTitle: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontWeight: typography.weight.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+  },
+
+  quickList: {
+    paddingHorizontal: spacing.lg,
+  },
+
+  quickChip: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginRight: spacing.sm,
+    maxWidth: 260,
+  },
+
+  quickChipText: {
     fontSize: typography.size.sm,
-    color: '#1E3A8A',
+    color: colors.textPrimary,
     fontWeight: typography.weight.bold,
   },
-  audioSendText: {
-    fontSize: typography.size.sm,
-    color: colors.primary,
-    fontWeight: typography.weight.bold,
-  },
-  audioCancelBtn: {
-    marginLeft: spacing.sm,
-  },
+
   inputArea: {
     backgroundColor: colors.white,
     borderTopWidth: 1,
@@ -710,79 +866,121 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     flexDirection: 'row',
     alignItems: 'flex-end',
+    gap: spacing.sm,
   },
-  micBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: radius.sm,
-    backgroundColor: colors.primary,
+
+  roundBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.sm,
   },
+
+  quickBtn: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+
+  quickBtnActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+
+  micBtn: {
+    backgroundColor: colors.primary,
+  },
+
   micBtnRecording: {
     backgroundColor: colors.danger,
   },
-  input: {
+
+  sendBtn: {
+    backgroundColor: colors.primary,
+  },
+
+  sendBtnDisabled: {
+    opacity: 0.35,
+  },
+
+  inputCenter: {
     flex: 1,
-    minHeight: 42,
+  },
+
+  input: {
+    minHeight: 44,
     maxHeight: 92,
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.sm,
+    borderRadius: 22,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     fontSize: typography.size.sm,
     color: colors.textPrimary,
   },
-  sendBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: radius.sm,
-    backgroundColor: colors.primary,
+
+  audioInputCard: {
+    minHeight: 44,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 22,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  recordingInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+
+  recordingDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: colors.danger,
+    marginRight: spacing.sm,
+  },
+
+  audioReadyIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+
+  audioInfoTextBox: {
+    flex: 1,
+  },
+
+  audioTitle: {
+    fontSize: typography.size.sm,
+    color: colors.textPrimary,
+    fontWeight: typography.weight.bold,
+  },
+
+  audioSubtitle: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 1,
+    fontWeight: typography.weight.semibold,
+  },
+
+  clearAudioBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: spacing.sm,
-  },
-  sendBtnDisabled: {
-    opacity: 0.45,
-  },
-  confirmActions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  confirmYesBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: radius.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-  },
-  confirmYesText: {
-    color: colors.white,
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.bold,
-    marginLeft: 5,
-  },
-  confirmNoBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.dangerBg,
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
-    borderRadius: radius.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-  },
-  confirmNoText: {
-    color: colors.danger,
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.bold,
-    marginLeft: 5,
   },
 });
