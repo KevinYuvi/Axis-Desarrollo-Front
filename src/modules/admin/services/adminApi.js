@@ -50,6 +50,16 @@ export async function obtenerReportesAdmin(token) {
   return fetchConToken('/api/v1/reportes/', token);
 }
 
+export async function actualizarEstadoReporteAdmin(token, reporteId, nuevoEstado) {
+  return fetchConToken(
+    `/api/v1/reportes/${reporteId}/estado?nuevo_estado=${nuevoEstado}`,
+    token,
+    {
+      method: 'PATCH',
+    }
+  );
+}
+
 export async function obtenerResumenAdmin(token) {
   const [aulasData, reservasData, reportesData] = await Promise.all([
     obtenerAulasAdmin(token),
@@ -96,4 +106,6 @@ export async function obtenerResumenAdmin(token) {
       reportesResueltos,
     },
   };
+
+  
 }
