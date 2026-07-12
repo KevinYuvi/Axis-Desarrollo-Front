@@ -38,6 +38,7 @@ export default function DocenteHomeScreen({ token }) {
   const obtenerTokenValido = async () => {
     const tokenClerk = await getToken({
       template: CLERK_JWT_TEMPLATE,
+      skipCache: true,
     });
 
     if (tokenClerk) {
@@ -49,6 +50,20 @@ export default function DocenteHomeScreen({ token }) {
     }
 
     throw new Error('No se pudo obtener un token válido de Clerk.');
+  };
+
+  const leerRespuestaSegura = async (response, valorInicial = {}) => {
+    const rawText = await response.text();
+
+    if (!rawText) {
+      return valorInicial;
+    }
+
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      return valorInicial;
+    }
   };
 
   const convertirFechaBackend = (fechaTexto) => {
@@ -73,54 +88,54 @@ export default function DocenteHomeScreen({ token }) {
     return Number.isNaN(tiempo) ? 0 : tiempo;
   };
 
-const filtrarProximasClases = (clases, claseActiva) => {
-  const ahoraMs = Date.now();
-  const claseActivaId = claseActiva?.reserva?.id;
+  const filtrarProximasClases = (clases, claseActiva) => {
+    const ahoraMs = Date.now();
+    const claseActivaId = claseActiva?.reserva?.id;
 
-  return clases
-    .filter((item) => {
-      const reserva = item?.reserva;
+    return clases
+      .filter((item) => {
+        const reserva = item?.reserva;
 
-      if (!reserva?.hora_inicio || !reserva?.hora_fin) {
-        return false;
-      }
+        if (!reserva?.hora_inicio || !reserva?.hora_fin) {
+          return false;
+        }
 
-      if (claseActivaId && reserva.id === claseActivaId) {
-        return false;
-      }
+        if (claseActivaId && reserva.id === claseActivaId) {
+          return false;
+        }
 
-      if (
-        reserva.liberada_anticipadamente === true ||
-        reserva.estado === 'liberada' ||
-        reserva.estado === 'cancelada'
-      ) {
-        return false;
-      }
+        if (
+          reserva.liberada_anticipadamente === true ||
+          reserva.estado === 'liberada' ||
+          reserva.estado === 'cancelada'
+        ) {
+          return false;
+        }
 
-      const inicioMs = obtenerTiempo(reserva.hora_inicio);
-      const finMs = obtenerTiempo(reserva.hora_fin);
+        const inicioMs = obtenerTiempo(reserva.hora_inicio);
+        const finMs = obtenerTiempo(reserva.hora_fin);
 
-      if (!inicioMs || !finMs) {
-        return false;
-      }
+        if (!inicioMs || !finMs) {
+          return false;
+        }
 
-      if (finMs <= ahoraMs) {
-        return false;
-      }
+        if (finMs <= ahoraMs) {
+          return false;
+        }
 
-      if (finMs <= inicioMs) {
-        return false;
-      }
+        if (finMs <= inicioMs) {
+          return false;
+        }
 
-      return inicioMs > ahoraMs;
-    })
-    .sort((a, b) => {
-      const inicioA = obtenerTiempo(a?.reserva?.hora_inicio);
-      const inicioB = obtenerTiempo(b?.reserva?.hora_inicio);
+        return inicioMs > ahoraMs;
+      })
+      .sort((a, b) => {
+        const inicioA = obtenerTiempo(a?.reserva?.hora_inicio);
+        const inicioB = obtenerTiempo(b?.reserva?.hora_inicio);
 
-      return inicioA - inicioB;
-    });
-};
+        return inicioA - inicioB;
+      });
+  };
 
   const cargarCronograma = async ({ silencioso = false } = {}) => {
     try {
@@ -148,7 +163,10 @@ const filtrarProximasClases = (clases, claseActiva) => {
       );
 
       if (responseClaseActual.ok) {
-        const dataClaseActual = await responseClaseActual.json();
+        const dataClaseActual = await leerRespuestaSegura(
+          responseClaseActual,
+          null
+        );
 
         if (dataClaseActual?.reserva) {
           claseActivaDesdeBackend = dataClaseActual;
@@ -171,6 +189,8 @@ const filtrarProximasClases = (clases, claseActiva) => {
         }
       );
 
+      const data = await leerRespuestaSegura(responseClasesHoy, []);
+
       if (!responseClasesHoy.ok) {
         if (responseClasesHoy.status === 401) {
           throw new Error('Tu sesión no es válida o el token fue rechazado.');
@@ -181,11 +201,11 @@ const filtrarProximasClases = (clases, claseActiva) => {
         }
 
         throw new Error(
-          `Error al obtener el cronograma de hoy. Status: ${responseClasesHoy.status}`
+          data?.detail ||
+            `Error al obtener el cronograma de hoy. Status: ${responseClasesHoy.status}`
         );
       }
 
-      const data = await responseClasesHoy.json();
       const clases = Array.isArray(data) ? data : [];
 
       const siguientes = filtrarProximasClases(

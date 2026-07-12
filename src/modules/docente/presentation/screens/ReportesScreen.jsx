@@ -10,12 +10,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@clerk/clerk-expo';
 
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const CLERK_JWT_TEMPLATE = 'Axis';
 
 const ESTADO_COLORS = {
   abierto: {
@@ -39,12 +41,45 @@ const ESTADO_COLORS = {
 };
 
 export default function ReportesScreen({ token, onBack }) {
+  const { getToken } = useAuth();
+
   const [reportes, setReportes] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     cargarReportes();
   }, []);
+
+  const obtenerTokenActual = async () => {
+    const tokenActual = await getToken({
+      template: CLERK_JWT_TEMPLATE,
+      skipCache: true,
+    });
+
+    if (tokenActual) {
+      return tokenActual;
+    }
+
+    if (token) {
+      return token;
+    }
+
+    throw new Error('No se pudo obtener una sesión activa. Vuelve a iniciar sesión.');
+  };
+
+  const leerRespuestaSegura = async (response, valorInicial = {}) => {
+    const rawText = await response.text();
+
+    if (!rawText) {
+      return valorInicial;
+    }
+
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      return valorInicial;
+    }
+  };
 
   const cargarReportes = async () => {
     try {
@@ -54,19 +89,17 @@ export default function ReportesScreen({ token, onBack }) {
         throw new Error('Falta EXPO_PUBLIC_API_URL en el archivo .env.');
       }
 
-      if (!token) {
-        throw new Error('No se encontró el token de sesión.');
-      }
+      const tokenActual = await obtenerTokenActual();
 
       const response = await fetch(`${API_URL}/api/v1/reportes/mis-reportes`, {
         method: 'GET',
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${tokenActual}`,
           Accept: 'application/json',
         },
       });
 
-      const data = await response.json();
+      const data = await leerRespuestaSegura(response, []);
 
       if (!response.ok) {
         throw new Error(data?.detail || 'No se pudieron cargar los reportes.');
@@ -438,15 +471,6 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xl,
     color: colors.textPrimary,
     fontWeight: typography.weight.bold,
-  },
-
-  summaryIconBox: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 
   statsRow: {

@@ -12,14 +12,18 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@clerk/clerk-expo';
 
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const CLERK_JWT_TEMPLATE = 'Axis';
 
 export default function ReservarAulaScreen({ token, onBack }) {
+  const { getToken } = useAuth();
+
   const [espacios, setEspacios] = useState([]);
   const [espacioSeleccionado, setEspacioSeleccionado] = useState(null);
 
@@ -43,10 +47,39 @@ export default function ReservarAulaScreen({ token, onBack }) {
   const [feedbackAccion, setFeedbackAccion] = useState(null);
 
   useEffect(() => {
-    if (token) {
-      cargarEspacios();
+    cargarEspacios();
+  }, []);
+
+  const obtenerTokenActual = async () => {
+    const tokenActual = await getToken({
+      template: CLERK_JWT_TEMPLATE,
+      skipCache: true,
+    });
+
+    if (tokenActual) {
+      return tokenActual;
     }
-  }, [token]);
+
+    if (token) {
+      return token;
+    }
+
+    throw new Error('No se pudo obtener una sesión activa. Vuelve a iniciar sesión.');
+  };
+
+  const leerRespuestaSegura = async (response, valorInicial = {}) => {
+    const rawText = await response.text();
+
+    if (!rawText) {
+      return valorInicial;
+    }
+
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      return valorInicial;
+    }
+  };
 
   const mostrarFeedback = ({
     tipo = 'info',
@@ -79,19 +112,17 @@ export default function ReservarAulaScreen({ token, onBack }) {
         throw new Error('Falta EXPO_PUBLIC_API_URL en el archivo .env.');
       }
 
-      if (!token) {
-        throw new Error('No se encontró el token de sesión.');
-      }
+      const tokenActual = await obtenerTokenActual();
 
       const response = await fetch(`${API_URL}/api/v1/espacios/`, {
         method: 'GET',
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${tokenActual}`,
           Accept: 'application/json',
         },
       });
 
-      const data = await response.json();
+      const data = await leerRespuestaSegura(response, []);
 
       if (!response.ok) {
         throw new Error(data?.detail || 'No se pudieron cargar las aulas.');
@@ -189,9 +220,7 @@ export default function ReservarAulaScreen({ token, onBack }) {
         throw new Error('Falta EXPO_PUBLIC_API_URL en el archivo .env.');
       }
 
-      if (!token) {
-        throw new Error('No se encontró el token de sesión.');
-      }
+      const tokenActual = await obtenerTokenActual();
 
       const bodyData = {
         espacio_id: espacioSeleccionado.id,
@@ -203,14 +232,14 @@ export default function ReservarAulaScreen({ token, onBack }) {
       const response = await fetch(`${API_URL}/api/v1/reservas/`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${tokenActual}`,
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
         body: JSON.stringify(bodyData),
       });
 
-      const data = await response.json();
+      const data = await leerRespuestaSegura(response, {});
 
       if (!response.ok) {
         throw new Error(data?.detail || 'No se pudo crear la reserva.');
@@ -501,7 +530,11 @@ export default function ReservarAulaScreen({ token, onBack }) {
             ) : (
               <>
                 <Text style={styles.submitBtnText}>Confirmar reserva</Text>
-                <Ionicons name="checkmark-circle-outline" size={18} color={colors.white} />
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={18}
+                  color={colors.white}
+                />
               </>
             )}
           </TouchableOpacity>

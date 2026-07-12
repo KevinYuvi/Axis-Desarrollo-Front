@@ -109,7 +109,7 @@ export default function RegisterScreen() {
         emailAddress: correoLimpio,
         password,
         unsafeMetadata: {
-          rol: 'estudiante',
+          rol: 'docente',
         },
       });
 

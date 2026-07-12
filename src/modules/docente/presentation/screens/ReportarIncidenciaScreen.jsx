@@ -14,12 +14,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@clerk/clerk-expo';
 
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const CLERK_JWT_TEMPLATE = 'Axis';
 
 const PRIORIDADES = [
   {
@@ -46,6 +48,8 @@ const PRIORIDADES = [
 ];
 
 export default function ReportarIncidenciaScreen({ token, claseActual, onBack }) {
+  const { getToken } = useAuth();
+
   const [prioridad, setPrioridad] = useState('media');
   const [descripcion, setDescripcion] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -59,6 +63,37 @@ export default function ReportarIncidenciaScreen({ token, claseActual, onBack })
   const aulaNombre = claseActual?.espacio?.nombre || 'Aula no identificada';
   const aulaBloque = claseActual?.espacio?.bloque || 'Sin bloque';
   const materia = claseActual?.reserva?.materia || 'Clase actual';
+
+  const obtenerTokenActual = async () => {
+    const tokenActual = await getToken({
+      template: CLERK_JWT_TEMPLATE,
+      skipCache: true,
+    });
+
+    if (tokenActual) {
+      return tokenActual;
+    }
+
+    if (token) {
+      return token;
+    }
+
+    throw new Error('No se pudo obtener una sesión activa. Vuelve a iniciar sesión.');
+  };
+
+  const leerRespuestaSegura = async (response, valorInicial = {}) => {
+    const rawText = await response.text();
+
+    if (!rawText) {
+      return valorInicial;
+    }
+
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      return valorInicial;
+    }
+  };
 
   const mostrarModal = ({ tipo = 'info', titulo, mensaje, accion = null }) => {
     setModalTipo(tipo);
@@ -88,15 +123,6 @@ export default function ReportarIncidenciaScreen({ token, claseActual, onBack })
       return;
     }
 
-    if (!token) {
-      mostrarModal({
-        tipo: 'error',
-        titulo: 'Sesión no válida',
-        mensaje: 'No se encontró el token de sesión.',
-      });
-      return;
-    }
-
     if (!claseActual?.espacio?.id) {
       mostrarModal({
         tipo: 'warning',
@@ -118,6 +144,8 @@ export default function ReportarIncidenciaScreen({ token, claseActual, onBack })
     try {
       setEnviando(true);
 
+      const tokenActual = await obtenerTokenActual();
+
       const payload = {
         espacio_id: claseActual.espacio.id,
         descripcion: descripcion.trim(),
@@ -127,14 +155,14 @@ export default function ReportarIncidenciaScreen({ token, claseActual, onBack })
       const response = await fetch(`${API_URL}/api/v1/reportes/`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${tokenActual}`,
           Accept: 'application/json',
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
+      const data = await leerRespuestaSegura(response, {});
 
       if (!response.ok) {
         throw new Error(data?.detail || 'No se pudo generar el reporte.');
@@ -143,7 +171,7 @@ export default function ReportarIncidenciaScreen({ token, claseActual, onBack })
       mostrarModal({
         tipo: 'success',
         titulo: 'Reporte generado',
-        mensaje: 'Tu reporte fue registrada correctamente.',
+        mensaje: 'Tu reporte fue registrado correctamente.',
         accion: () => {
           setPrioridad('media');
           setDescripcion('');
@@ -324,9 +352,7 @@ export default function ReportarIncidenciaScreen({ token, claseActual, onBack })
               {enviando ? (
                 <ActivityIndicator color={colors.white} />
               ) : (
-                <>
-                  <Text style={styles.submitBtnText}>Enviar reporte</Text>
-                </>
+                <Text style={styles.submitBtnText}>Enviar reporte</Text>
               )}
             </TouchableOpacity>
           </View>

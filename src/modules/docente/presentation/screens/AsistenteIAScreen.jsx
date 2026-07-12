@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@clerk/clerk-expo';
 
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
@@ -29,6 +30,7 @@ import {
 } from 'expo-audio';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const CLERK_JWT_TEMPLATE = 'Axis';
 
 const preguntasRapidas = [
   '¿Qué biblioteca tiene más espacio disponible ahora?',
@@ -38,6 +40,8 @@ const preguntasRapidas = [
 ];
 
 export default function AsistenteIAScreen({ token, onBack, rol }) {
+  const { getToken } = useAuth();
+
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(audioRecorder);
 
@@ -72,6 +76,52 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 150);
   }, [mensajes, enviando]);
+
+  const obtenerTokenActual = async () => {
+    const tokenActual = await getToken({
+      template: CLERK_JWT_TEMPLATE,
+      skipCache: true,
+    });
+
+    if (tokenActual) {
+      return tokenActual;
+    }
+
+    if (token) {
+      return token;
+    }
+
+    throw new Error('No se pudo obtener una sesión activa. Vuelve a iniciar sesión.');
+  };
+
+  const leerRespuestaSegura = async (response, valorInicial = {}) => {
+    const rawText = await response.text();
+
+    if (!rawText) {
+      return valorInicial;
+    }
+
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      return valorInicial;
+    }
+  };
+
+  const validarApiUrl = () => {
+    if (!API_URL) {
+      throw new Error('Falta EXPO_PUBLIC_API_URL en el archivo .env.');
+    }
+
+    if (
+      Platform.OS !== 'web' &&
+      (API_URL.includes('localhost') || API_URL.includes('127.0.0.1'))
+    ) {
+      throw new Error(
+        'En Android no uses localhost. Usa la IP de tu computadora, por ejemplo: http://192.168.1.20:8000'
+      );
+    }
+  };
 
   const prepararAudio = async () => {
     try {
@@ -116,7 +166,7 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
           const nuevoValor = prev + 1;
 
           if (nuevoValor >= 60) {
-            detenerGrabacion(false);
+            detenerGrabacion();
             return 60;
           }
 
@@ -206,13 +256,9 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
     try {
       setEnviando(true);
 
-      if (!API_URL) {
-        throw new Error('Falta EXPO_PUBLIC_API_URL en el archivo .env.');
-      }
+      validarApiUrl();
 
-      if (!token) {
-        throw new Error('No se encontró el token de sesión.');
-      }
+      const tokenActual = await obtenerTokenActual();
 
       if (textoEnviar) {
         agregarMensaje({
@@ -241,7 +287,7 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
         const nombreArchivo =
           Platform.OS === 'web' ? 'audio_axis.webm' : 'audio_axis.m4a';
 
-        const tipoArchivo = Platform.OS === 'web' ? 'audio/webm' : 'audio/m4a';
+        const tipoArchivo = Platform.OS === 'web' ? 'audio/webm' : 'audio/mp4';
 
         formData.append('file', {
           uri: uriAudio,
@@ -255,13 +301,13 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
       const response = await fetch(`${API_URL}/api/v1/ia/procesar-solicitud`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${tokenActual}`,
           Accept: 'application/json',
         },
         body: formData,
       });
 
-      const data = await response.json();
+      const data = await leerRespuestaSegura(response, {});
 
       if (!response.ok) {
         throw new Error(data?.detail || 'No se pudo procesar la solicitud.');
@@ -277,7 +323,9 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
 
       agregarMensaje({
         tipo: 'ia',
-        texto: error.message || 'No se pudo procesar la solicitud.',
+        texto:
+          error.message ||
+          'No se pudo procesar la solicitud. Revisa la conexión con el backend.',
         error: true,
       });
     } finally {
