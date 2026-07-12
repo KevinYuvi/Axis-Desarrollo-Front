@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/clerk-expo';
+import { useRouter, useFocusEffect } from 'expo-router';
 
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
@@ -20,39 +21,15 @@ import { AppHeader } from '../../../../shared/components';
 
 import DetalleAulaScreen from './DetalleAulaScreen';
 import ReportarIncidenciaScreen from './ReportarIncidenciaScreen';
-import ReportesScreen from './ReportesScreen';
-import ReservarAulaScreen from './ReservarAulaScreen';
-import AsistenteIAScreen from './AsistenteIAScreen';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 const CLERK_JWT_TEMPLATE = 'Axis';
 
-const ESTADO_CONFIG = {
-  activa: {
-    bg: '#F0FDF4',
-    text: '#16A34A',
-    label: 'Activa',
-    icon: 'checkmark-circle-outline',
-  },
-  pendiente: {
-    bg: '#FFF7ED',
-    text: '#D97706',
-    label: 'Pendiente',
-    icon: 'time-outline',
-  },
-  cancelada: {
-    bg: '#FEF2F2',
-    text: '#DC2626',
-    label: 'Cancelada',
-    icon: 'close-circle-outline',
-  },
-};
-
-export default function DocenteHomeScreen({ onNavigate, token }) {
+export default function DocenteHomeScreen({ token }) {
+  const router = useRouter();
   const { getToken, signOut } = useAuth();
 
   const [pantallaActual, setPantallaActual] = useState('home');
-  const [clasesHoy, setClasesHoy] = useState([]);
   const [claseActual, setClaseActual] = useState(null);
   const [claseSeleccionada, setClaseSeleccionada] = useState(null);
   const [proximasClases, setProximasClases] = useState([]);
@@ -74,9 +51,58 @@ export default function DocenteHomeScreen({ onNavigate, token }) {
     throw new Error('No se pudo obtener un token válido de Clerk.');
   };
 
-  useEffect(() => {
-    cargarCronograma();
-  }, []);
+  const convertirFechaBackend = (fechaTexto) => {
+    if (!fechaTexto) return null;
+
+    if (typeof fechaTexto === 'string' && !fechaTexto.endsWith('Z')) {
+      return new Date(fechaTexto);
+    }
+
+    return new Date(fechaTexto);
+  };
+
+  const obtenerTiempo = (isoFecha) => {
+    const fecha = convertirFechaBackend(isoFecha);
+
+    if (!fecha) return 0;
+
+    const tiempo = fecha.getTime();
+
+    return Number.isNaN(tiempo) ? 0 : tiempo;
+  };
+
+  const filtrarProximasClases = (clases, claseActiva) => {
+    const ahoraMs = Date.now();
+    const claseActivaId = claseActiva?.reserva?.id;
+
+    return clases
+      .filter((item) => {
+        const reserva = item?.reserva;
+
+        if (!reserva?.hora_inicio) {
+          return false;
+        }
+
+        if (claseActivaId && reserva.id === claseActivaId) {
+          return false;
+        }
+
+        const inicioMs = obtenerTiempo(reserva.hora_inicio);
+        const finMs = obtenerTiempo(reserva.hora_fin);
+
+        if (!inicioMs || !finMs) {
+          return false;
+        }
+
+        return inicioMs > ahoraMs;
+      })
+      .sort((a, b) => {
+        const inicioA = obtenerTiempo(a?.reserva?.hora_inicio);
+        const inicioB = obtenerTiempo(b?.reserva?.hora_inicio);
+
+        return inicioA - inicioB;
+      });
+  };
 
   const cargarCronograma = async () => {
     try {
@@ -106,6 +132,8 @@ export default function DocenteHomeScreen({ onNavigate, token }) {
 
       if (responseClaseActual.ok) {
         const dataClaseActual = await responseClaseActual.json();
+
+        console.log('DATA MI CLASE ACTUAL:', dataClaseActual);
 
         if (dataClaseActual?.reserva) {
           claseActivaDesdeBackend = dataClaseActual;
@@ -144,9 +172,7 @@ export default function DocenteHomeScreen({ onNavigate, token }) {
         }
 
         if (responseClasesHoy.status === 403) {
-          throw new Error(
-            'Tu usuario no tiene rol de docente o admin en Clerk.'
-          );
+          throw new Error('Tu usuario no tiene rol de docente o admin en Clerk.');
         }
 
         throw new Error(
@@ -155,20 +181,18 @@ export default function DocenteHomeScreen({ onNavigate, token }) {
       }
 
       const data = await responseClasesHoy.json();
-
       const clases = Array.isArray(data) ? data : [];
 
-      setClasesHoy(clases);
+      console.log('DATA MIS CLASES HOY:', clases);
 
-      if (claseActivaDesdeBackend?.reserva?.id) {
-        setProximasClases(
-          clases.filter(
-            (item) => item.reserva?.id !== claseActivaDesdeBackend.reserva.id
-          )
-        );
-      } else {
-        setProximasClases(clases);
-      }
+      const siguientes = filtrarProximasClases(
+        clases,
+        claseActivaDesdeBackend
+      );
+
+      console.log('PRÓXIMAS CLASES FILTRADAS:', siguientes);
+
+      setProximasClases(siguientes);
     } catch (error) {
       console.error('Error cargando cronograma:', error);
 
@@ -181,10 +205,22 @@ export default function DocenteHomeScreen({ onNavigate, token }) {
     }
   };
 
+  useEffect(() => {
+    cargarCronograma();
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      cargarCronograma();
+    }, [])
+  );
+
   const cerrarSesion = async () => {
     try {
       await signOut();
+      router.replace('/(auth)/login');
     } catch (error) {
+      console.error('Error cerrando sesión:', error);
       Alert.alert('Error', 'No se pudo cerrar sesión.');
     }
   };
@@ -198,19 +234,15 @@ export default function DocenteHomeScreen({ onNavigate, token }) {
       hour12: false,
     };
 
-    return `${new Date(isoInicio).toLocaleTimeString([], opts)} – ${new Date(
-      isoFin
-    ).toLocaleTimeString([], opts)}`;
-  };
+    const inicio = convertirFechaBackend(isoInicio);
+    const fin = convertirFechaBackend(isoFin);
 
-  const getEstadoClase = (item) => {
-    const inicioMs = new Date(item.reserva?.hora_inicio).getTime();
-    const finMs = new Date(item.reserva?.hora_fin).getTime();
-    const ahoraMs = Date.now();
+    if (!inicio || !fin) return 'N/A';
 
-    if (ahoraMs >= inicioMs && ahoraMs <= finMs) return ESTADO_CONFIG.activa;
-    if (ahoraMs < inicioMs) return ESTADO_CONFIG.pendiente;
-    return ESTADO_CONFIG.cancelada;
+    return `${inicio.toLocaleTimeString([], opts)} – ${fin.toLocaleTimeString(
+      [],
+      opts
+    )}`;
   };
 
   const formatFecha = (isoStr) => {
@@ -221,6 +253,11 @@ export default function DocenteHomeScreen({ onNavigate, token }) {
       day: '2-digit',
       month: 'long',
     });
+  };
+
+  const abrirDetalle = (item) => {
+    setClaseSeleccionada(item);
+    setPantallaActual('detalle');
   };
 
   if (pantallaActual === 'detalle') {
@@ -236,7 +273,6 @@ export default function DocenteHomeScreen({ onNavigate, token }) {
           cargarCronograma();
         }}
         onReportar={() => setPantallaActual('reporte')}
-        onVerReportes={() => setPantallaActual('reportes')}
       />
     );
   }
@@ -245,38 +281,8 @@ export default function DocenteHomeScreen({ onNavigate, token }) {
     return (
       <ReportarIncidenciaScreen
         token={token}
-        claseActual={claseActual}
+        claseActual={claseSeleccionada || claseActual}
         onBack={() => setPantallaActual('detalle')}
-      />
-    );
-  }
-
-  if (pantallaActual === 'reportes') {
-    return (
-      <ReportesScreen
-        token={token}
-        onBack={() => setPantallaActual('home')}
-      />
-    );
-  }
-
-  if (pantallaActual === 'reservar') {
-    return (
-      <ReservarAulaScreen
-        token={token}
-        onBack={() => {
-          setPantallaActual('home');
-          cargarCronograma();
-        }}
-      />
-    );
-  }
-
-  if (pantallaActual === 'ia') {
-    return (
-      <AsistenteIAScreen
-        token={token}
-        onBack={() => setPantallaActual('home')}
       />
     );
   }
@@ -288,7 +294,7 @@ export default function DocenteHomeScreen({ onNavigate, token }) {
       <AppHeader
         rol="docente"
         onNotifPress={cargarCronograma}
-        onProfilePress={onNavigate ? () => onNavigate('profile') : undefined}
+        onProfilePress={() => router.push('/(docente)/perfil')}
         onLogoutPress={cerrarSesion}
       />
 
@@ -309,7 +315,7 @@ export default function DocenteHomeScreen({ onNavigate, token }) {
 
           <TouchableOpacity
             style={styles.reserveBtn}
-            onPress={() => setPantallaActual('reservar')}
+            onPress={() => router.push('/(docente)/reservas')}
           >
             <Ionicons name="add" size={15} color={colors.white} />
             <Text style={styles.reserveBtnText}>Reservar</Text>
@@ -326,7 +332,7 @@ export default function DocenteHomeScreen({ onNavigate, token }) {
           <TouchableOpacity
             activeOpacity={0.85}
             style={styles.mainCard}
-            onPress={() => setPantallaActual('detalle')}
+            onPress={() => abrirDetalle(claseActual)}
           >
             <View style={styles.cardHeader}>
               <View style={styles.cardHeaderText}>
@@ -387,80 +393,51 @@ export default function DocenteHomeScreen({ onNavigate, token }) {
           </View>
         )}
 
-        <Text style={styles.sectionTitle}>Otras clases de hoy</Text>
+        <Text style={styles.sectionTitle}>Próximas clases de hoy</Text>
 
         {loading ? (
           <ActivityIndicator size="small" color={colors.textMuted} />
         ) : proximasClases.length > 0 ? (
-          proximasClases.map((item, index) => {
-            const estadoCfg = getEstadoClase(item);
+          proximasClases.map((item, index) => (
+            <TouchableOpacity
+              key={item.reserva?.id || index}
+              style={styles.compactCard}
+              onPress={() => abrirDetalle(item)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.compactCardTop}>
+                <View style={styles.compactCardLeft}>
+                  <Text style={styles.compactAulaName}>
+                    {item.espacio?.nombre || 'Aula'}
+                  </Text>
 
-            return (
-              <TouchableOpacity
-                key={item.reserva?.id || index}
-                style={[
-                  styles.compactCard,
-                  {
-                    borderColor: estadoCfg.text,
-                    borderLeftWidth: 3,
-                  },
-                ]}
-                onPress={() => {
-                  setClaseSeleccionada(item);
-                  setPantallaActual('detalle');
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={styles.compactCardTop}>
-                  <View style={styles.compactCardLeft}>
-                    <Text style={styles.compactAulaName}>
-                      {item.espacio?.nombre || 'Aula'}
-                    </Text>
-
-                    <Text style={styles.compactHorario}>
-                      {formatHorario(
-                        item.reserva?.hora_inicio,
-                        item.reserva?.hora_fin
-                      )}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.compactBadge,
-                      { backgroundColor: estadoCfg.bg },
-                    ]}
-                  >
-                    <Ionicons
-                      name={estadoCfg.icon}
-                      size={12}
-                      color={estadoCfg.text}
-                    />
-
-                    <Text
-                      style={[
-                        styles.compactBadgeText,
-                        { color: estadoCfg.text },
-                      ]}
-                    >
-                      {estadoCfg.label}
-                    </Text>
-                  </View>
+                  <Text style={styles.compactHorario}>
+                    {formatHorario(
+                      item.reserva?.hora_inicio,
+                      item.reserva?.hora_fin
+                    )}
+                  </Text>
                 </View>
 
-                <Text style={styles.compactMateria}>
-                  {item.reserva?.materia || 'Sin materia'}
-                </Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.textSecondary}
+                />
+              </View>
 
-                <Text style={styles.compactUbicacion}>
-                  📍 {item.espacio?.ubicacion || 'Ubicación'}
-                </Text>
-              </TouchableOpacity>
-            );
-          })
+              <Text style={styles.compactMateria}>
+                {item.reserva?.materia || 'Sin materia'}
+              </Text>
+
+              <Text style={styles.compactUbicacion}>
+                📍 {item.espacio?.ubicacion || 'Ubicación no registrada'}
+              </Text>
+            </TouchableOpacity>
+          ))
         ) : (
           <Text style={styles.emptyText}>
-            No tienes más clases programadas para hoy.
+            No tienes más clases pendientes para hoy.
           </Text>
         )}
       </ScrollView>
@@ -662,9 +639,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.sm,
-    marginBottom: spacing.xs,
-    paddingLeft: spacing.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
   },
 
   compactCardTop: {
@@ -689,20 +665,6 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xs,
     color: colors.textSecondary,
     marginTop: 2,
-  },
-
-  compactBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radius.sm,
-  },
-
-  compactBadgeText: {
-    fontSize: 10,
-    fontWeight: typography.weight.bold,
   },
 
   compactMateria: {

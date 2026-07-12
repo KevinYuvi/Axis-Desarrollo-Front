@@ -103,9 +103,11 @@ export default function ReservarAulaScreen({ token, onBack }) {
     const fechas = [];
     const hoy = new Date();
 
+    hoy.setHours(0, 0, 0, 0);
+
     for (let i = 0; i < 7; i++) {
       const fecha = new Date(hoy);
-      fecha.setDate(fecha.getDate() + i);
+      fecha.setDate(hoy.getDate() + i);
       fechas.push(formatearFechaLocal(fecha));
     }
 
@@ -115,13 +117,11 @@ export default function ReservarAulaScreen({ token, onBack }) {
   const generarHoras = () => {
     const horas = [];
 
-    for (let h = 7; h <= 22; h++) {
+    for (let h = 0; h <= 23; h++) {
       const hora = h.toString().padStart(2, '0');
-      horas.push(`${hora}:00`);
 
-      if (h < 22) {
-        horas.push(`${hora}:30`);
-      }
+      horas.push(`${hora}:00`);
+      horas.push(`${hora}:30`);
     }
 
     return horas;
@@ -261,7 +261,10 @@ export default function ReservarAulaScreen({ token, onBack }) {
     <TouchableOpacity
       style={styles.optionCard}
       onPress={() => {
-        if (horaInicio && convertirMinutos(item) <= convertirMinutos(horaInicio)) {
+        if (
+          horaInicio &&
+          convertirMinutos(item) <= convertirMinutos(horaInicio)
+        ) {
           Alert.alert(
             'Horario inválido',
             'La hora de fin debe ser posterior a la hora de inicio.'
@@ -386,7 +389,10 @@ export default function ReservarAulaScreen({ token, onBack }) {
                 onPress={() => setModalHoraInicioVisible(true)}
               >
                 <Text
-                  style={[styles.selectText, !horaInicio && styles.placeholderText]}
+                  style={[
+                    styles.selectText,
+                    !horaInicio && styles.placeholderText,
+                  ]}
                 >
                   {horaInicio || 'Inicio'}
                 </Text>
@@ -407,7 +413,10 @@ export default function ReservarAulaScreen({ token, onBack }) {
                 onPress={() => setModalHoraFinVisible(true)}
               >
                 <Text
-                  style={[styles.selectText, !horaFin && styles.placeholderText]}
+                  style={[
+                    styles.selectText,
+                    !horaFin && styles.placeholderText,
+                  ]}
                 >
                   {horaFin || 'Fin'}
                 </Text>
