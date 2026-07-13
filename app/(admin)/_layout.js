@@ -60,7 +60,7 @@ export default function AdminLayout() {
         options={{
           title: 'Reportes',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="document-text-outline" size={size} color={color} />
+            <Ionicons name="ticket-outline" size={size} color={color} />
           ),
         }}
       />
