@@ -16,7 +16,7 @@ import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
 import { AppHeader } from '../../../../shared/components';
-
+import { crearConexionRealtime } from '../../../../shared/realtime/realtimeClient';
 import { obtenerReservasAdmin } from '../../services/adminApi';
 
 import ReservaCard from '../components/reservas/ReservaCard';
@@ -76,9 +76,20 @@ export default function AdminReservasScreen() {
   useFocusEffect(
     useCallback(() => {
       cargarReservas({ silencioso: true });
+
+      const realtime = crearConexionRealtime({
+        onEvento: (evento) => {
+          if (evento.tipo === 'reservas_actualizadas') {
+            cargarReservas({ silencioso: true });
+          }
+        },
+      });
+
+      return () => {
+        realtime?.cerrar();
+      };
     }, [])
   );
-
   const reservasActivas = reservas.filter(
     (item) => obtenerEstadoReserva(item) === 'activa'
   ).length;

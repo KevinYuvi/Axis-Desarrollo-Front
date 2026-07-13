@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/clerk-expo';
-
+import { crearConexionRealtime } from '../../../../shared/realtime/realtimeClient';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
@@ -82,6 +82,23 @@ export default function AdminHomeScreen() {
   useFocusEffect(
     useCallback(() => {
       cargarResumen({ silencioso: true });
+
+      const realtime = crearConexionRealtime({
+        onEvento: (evento) => {
+          if (
+            evento.tipo === 'dashboard_actualizado' ||
+            evento.tipo === 'reservas_actualizadas' ||
+            evento.tipo === 'aulas_actualizadas' ||
+            evento.tipo === 'reportes_actualizados'
+          ) {
+            cargarResumen({ silencioso: true });
+          }
+        },
+      });
+
+      return () => {
+        realtime?.cerrar();
+      };
     }, [])
   );
 

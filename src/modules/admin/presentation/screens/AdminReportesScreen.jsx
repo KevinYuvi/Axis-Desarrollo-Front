@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/clerk-expo';
-
+import { crearConexionRealtime } from '../../../../shared/realtime/realtimeClient';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
@@ -103,6 +103,18 @@ export default function AdminReportesScreen() {
   useFocusEffect(
     useCallback(() => {
       cargarReportes({ silencioso: true });
+
+      const realtime = crearConexionRealtime({
+        onEvento: (evento) => {
+          if (evento.tipo === 'reportes_actualizados') {
+            cargarReportes({ silencioso: true });
+          }
+        },
+      });
+
+      return () => {
+        realtime?.cerrar();
+      };
     }, [])
   );
 

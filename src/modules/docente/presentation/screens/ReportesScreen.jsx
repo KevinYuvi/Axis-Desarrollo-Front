@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -11,10 +11,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/clerk-expo';
+import { useFocusEffect } from 'expo-router';
 
+import { crearConexionRealtime } from '../../../../shared/realtime/realtimeClient';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
+import AppHeader from '../../../../shared/components/organisms/AppHeader';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 const CLERK_JWT_TEMPLATE = 'Axis';
@@ -40,15 +43,44 @@ const ESTADO_COLORS = {
   },
 };
 
+const GRAVEDAD_COLORS = {
+  baja: {
+    text: '#16A34A',
+    label: 'Baja',
+  },
+  media: {
+    text: colors.primary,
+    label: 'Media',
+  },
+  alta: {
+    text: '#DC2626',
+    label: 'Alta',
+  },
+};
+
 export default function ReportesScreen({ token, onBack }) {
   const { getToken } = useAuth();
 
   const [reportes, setReportes] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    cargarReportes();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      cargarReportes();
+
+      const realtime = crearConexionRealtime({
+        onEvento: (evento) => {
+          if (evento.tipo === 'reportes_actualizados') {
+            cargarReportes();
+          }
+        },
+      });
+
+      return () => {
+        realtime?.cerrar();
+      };
+    }, [])
+  );
 
   const obtenerTokenActual = async () => {
     const tokenActual = await getToken({
@@ -138,9 +170,11 @@ export default function ReportesScreen({ token, onBack }) {
 
   const obtenerConteos = () => {
     const abiertos = reportes.filter((item) => item.estado === 'abierto').length;
+
     const enProceso = reportes.filter(
       (item) => item.estado === 'en_proceso'
     ).length;
+
     const resueltos = reportes.filter(
       (item) => item.estado === 'resuelto'
     ).length;
@@ -160,6 +194,7 @@ export default function ReportesScreen({ token, onBack }) {
       <View>
         <View style={styles.summarySkeleton}>
           <View style={styles.skeletonLineLarge} />
+
           <View style={styles.skeletonStatsRow}>
             <View style={styles.skeletonStatBox} />
             <View style={styles.skeletonStatBox} />
@@ -193,36 +228,30 @@ export default function ReportesScreen({ token, onBack }) {
 
   const renderResumen = () => {
     return (
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryTop}>
-          <View>
-            <Text style={styles.summaryLabel}>Resumen</Text>
-            <Text style={styles.summaryTitle}>
-              {conteos.total} {conteos.total === 1 ? 'reporte' : 'reportes'}
-            </Text>
-          </View>
+      <View style={styles.summaryCompact}>
+        <View style={styles.summaryMain}>
+          <Text style={styles.summaryNumber}>{conteos.total}</Text>
+
+          <Text style={styles.summaryText}>
+            {conteos.total === 1 ? 'Reporte' : 'Reportes'}
+          </Text>
         </View>
 
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{conteos.abiertos}</Text>
-            <Text style={styles.statLabel}>Abiertos</Text>
-          </View>
+        <View style={styles.summaryDivider} />
 
-          <View style={styles.statDivider} />
+        <MiniCount label="Abiertos" value={conteos.abiertos} color="#D97706" />
 
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{conteos.enProceso}</Text>
-            <Text style={styles.statLabel}>En proceso</Text>
-          </View>
+        <MiniCount
+          label="Proceso"
+          value={conteos.enProceso}
+          color={colors.primary}
+        />
 
-          <View style={styles.statDivider} />
-
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{conteos.resueltos}</Text>
-            <Text style={styles.statLabel}>Resueltos</Text>
-          </View>
-        </View>
+        <MiniCount
+          label="Resueltos"
+          value={conteos.resueltos}
+          color="#16A34A"
+        />
       </View>
     );
   };
@@ -231,28 +260,40 @@ export default function ReportesScreen({ token, onBack }) {
     const estadoKey = item.estado || 'abierto';
     const estadoConfig = ESTADO_COLORS[estadoKey] || ESTADO_COLORS.abierto;
 
+    const gravedadKey = item.gravedad || 'media';
+    const gravedadConfig =
+      GRAVEDAD_COLORS[gravedadKey] || GRAVEDAD_COLORS.media;
+
+    const codigo = item.codigo || `TK-${String(index + 1).padStart(3, '0')}`;
+    const aula = item.espacio_nombre || item.espacio_id || 'Sin aula';
+
     return (
       <View key={item.id || index} style={styles.reportCard}>
         <View style={styles.reportHeader}>
-          <View style={styles.reportIconBox}>
-            <Ionicons
-              name="document-text-outline"
-              size={20}
-              color={colors.primary}
-            />
+          <View style={styles.reportTitleBox}>
+            <Text style={styles.reportCodigo}>{codigo}</Text>
+
+            <View style={styles.reportDateRow}>
+              <Ionicons
+                name="calendar-outline"
+                size={13}
+                color={colors.textSecondary}
+              />
+
+              <Text style={styles.reportDate}>
+                {formatearFecha(item.fecha_reporte)}
+              </Text>
+            </View>
           </View>
 
-          <View style={styles.reportHeaderText}>
-            <Text style={styles.reportCodigo}>
-              {item.codigo || `TK-${String(index + 1).padStart(3, '0')}`}
-            </Text>
-
-            <Text style={styles.reportDate}>
-              {formatearFecha(item.fecha_reporte)}
-            </Text>
-          </View>
-
-          <View style={[styles.statusBadge, { backgroundColor: estadoConfig.bg }]}>
+          <View
+            style={[
+              styles.statusBadge,
+              {
+                backgroundColor: estadoConfig.bg,
+              },
+            ]}
+          >
             <Ionicons
               name={estadoConfig.icon}
               size={12}
@@ -265,32 +306,35 @@ export default function ReportesScreen({ token, onBack }) {
           </View>
         </View>
 
-        <Text style={styles.reportDescription} numberOfLines={3}>
+        <Text style={styles.reportDescription} numberOfLines={4}>
           {item.descripcion || 'Sin descripción registrada.'}
         </Text>
 
-        <View style={styles.reportMetaRow}>
-          <View style={styles.metaChip}>
+        <View style={styles.reportFooter}>
+          <View style={styles.footerInfo}>
             <Ionicons
-              name="speedometer-outline"
-              size={13}
+              name="business-outline"
+              size={14}
               color={colors.textSecondary}
             />
 
-            <Text style={styles.metaText}>
-              {item.gravedad || 'Sin gravedad'}
+            <Text style={styles.footerText} numberOfLines={1}>
+              {aula}
             </Text>
           </View>
 
-          <View style={styles.metaChip}>
-            <Ionicons
-              name="business-outline"
-              size={13}
-              color={colors.textSecondary}
-            />
+          <View style={styles.gravityInfo}>
+            <Text style={styles.gravityLabel}>Gravedad:</Text>
 
-            <Text style={styles.metaText} numberOfLines={1}>
-              {item.espacio_nombre || item.espacio_id || 'Sin aula'}
+            <Text
+              style={[
+                styles.gravityValue,
+                {
+                  color: gravedadConfig.text,
+                },
+              ]}
+            >
+              {gravedadConfig.label}
             </Text>
           </View>
         </View>
@@ -323,30 +367,21 @@ export default function ReportesScreen({ token, onBack }) {
     <SafeAreaView style={styles.screen} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
 
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={onBack}
-          accessibilityLabel="Volver"
-        >
-          <Ionicons name="arrow-back" size={22} color={colors.primary} />
-        </TouchableOpacity>
+      <AppHeader rol="docente" />
 
-        <View style={styles.headerTextBox}>
-          <Text style={styles.headerTitle}>Incidencias</Text>
-          <Text style={styles.headerSubtitle}>Seguimiento de reportes</Text>
+      <View style={styles.pageHeader}>
+
+        <View style={styles.pageHeaderText}>
+          <Text style={styles.pageTitle}>Incidencias</Text>
+          <Text style={styles.pageSubtitle}>Seguimiento de reportes</Text>
         </View>
 
         <TouchableOpacity
-          style={styles.iconBtn}
+          style={styles.refreshBtn}
           onPress={cargarReportes}
           accessibilityLabel="Actualizar"
+          activeOpacity={0.85}
         >
-          <Ionicons
-            name="refresh-outline"
-            size={21}
-            color={colors.textPrimary}
-          />
         </TouchableOpacity>
       </View>
 
@@ -362,11 +397,17 @@ export default function ReportesScreen({ token, onBack }) {
             {renderResumen()}
 
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Mis reportes</Text>
+              <View>
+                <Text style={styles.sectionTitle}>Mis reportes</Text>
 
-              <Text style={styles.sectionCount}>
-                {reportes.length} {reportes.length === 1 ? 'registro' : 'registros'}
-              </Text>
+                <Text style={styles.sectionSubtitle}>
+                  Estado actualizado de tus incidencias.
+                </Text>
+              </View>
+
+              <View style={styles.sectionCountBadge}>
+                <Text style={styles.sectionCount}>{reportes.length}</Text>
+              </View>
             </View>
 
             {reportes.length > 0 ? (
@@ -381,20 +422,64 @@ export default function ReportesScreen({ token, onBack }) {
   );
 }
 
+function MiniCount({ label, value, color }) {
+  return (
+    <View style={styles.miniCount}>
+      <Text style={[styles.miniCountValue, { color }]}>{value}</Text>
+      <Text style={styles.miniCountLabel}>{label}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.white,
   },
 
-  header: {
+  pageHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
     backgroundColor: colors.white,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+
+  pageHeaderText: {
+    flex: 1,
+  },
+
+  pageTitle: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.bold,
+    color: colors.textPrimary,
+  },
+
+  pageSubtitle: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+
+  refreshBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   backBtn: {
@@ -407,30 +492,6 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
 
-  headerTextBox: {
-    flex: 1,
-  },
-
-  headerTitle: {
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.bold,
-    color: colors.textPrimary,
-  },
-
-  headerSubtitle: {
-    fontSize: typography.size.xs,
-    color: colors.textSecondary,
-    marginTop: 1,
-  },
-
-  iconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 
   scroll: {
     flex: 1,
@@ -442,67 +503,57 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl,
   },
 
-  summaryCard: {
+  summaryCompact: {
     backgroundColor: colors.white,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
-  },
-
-  summaryTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    padding: spacing.md,
     marginBottom: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 
-  summaryLabel: {
-    fontSize: typography.size.xs,
+  summaryMain: {
+    minWidth: 76,
+    paddingRight: spacing.sm,
+  },
+
+  summaryNumber: {
+    fontSize: 24,
+    fontWeight: typography.weight.bold,
+    color: colors.textPrimary,
+  },
+
+  summaryText: {
+    fontSize: 11,
     color: colors.textSecondary,
     fontWeight: typography.weight.bold,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 4,
+    marginTop: -2,
   },
 
-  summaryTitle: {
-    fontSize: typography.size.xl,
-    color: colors.textPrimary,
-    fontWeight: typography.weight.bold,
+  summaryDivider: {
+    width: 1,
+    height: 38,
+    backgroundColor: colors.border,
+    marginRight: spacing.sm,
   },
 
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-  },
-
-  statItem: {
+  miniCount: {
     flex: 1,
     alignItems: 'center',
   },
 
-  statNumber: {
-    fontSize: typography.size.lg,
-    color: colors.textPrimary,
+  miniCountValue: {
+    fontSize: typography.size.md,
     fontWeight: typography.weight.bold,
   },
 
-  statLabel: {
-    fontSize: 11,
+  miniCountLabel: {
+    fontSize: 10,
     color: colors.textSecondary,
-    marginTop: 2,
     fontWeight: typography.weight.semibold,
-  },
-
-  statDivider: {
-    width: 1,
-    height: 34,
-    backgroundColor: colors.border,
+    marginTop: 1,
   },
 
   sectionHeader: {
@@ -518,10 +569,27 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
 
-  sectionCount: {
+  sectionSubtitle: {
     fontSize: typography.size.xs,
     color: colors.textSecondary,
-    fontWeight: typography.weight.semibold,
+    marginTop: 2,
+  },
+
+  sectionCountBadge: {
+    minWidth: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  sectionCount: {
+    fontSize: typography.size.sm,
+    color: colors.textPrimary,
+    fontWeight: typography.weight.bold,
   },
 
   reportCard: {
@@ -535,36 +603,33 @@ const styles = StyleSheet.create({
 
   reportHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: spacing.sm,
   },
 
-  reportIconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.sm,
-  },
-
-  reportHeaderText: {
+  reportTitleBox: {
     flex: 1,
     paddingRight: spacing.sm,
   },
 
   reportCodigo: {
-    fontSize: typography.size.sm,
+    fontSize: typography.size.md,
     fontWeight: typography.weight.bold,
     color: colors.textPrimary,
+  },
+
+  reportDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 4,
   },
 
   reportDate: {
     fontSize: typography.size.xs,
     color: colors.textSecondary,
-    marginTop: 2,
     textTransform: 'capitalize',
+    fontWeight: typography.weight.semibold,
   },
 
   statusBadge: {
@@ -585,30 +650,49 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     color: colors.textPrimary,
     lineHeight: 20,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
 
-  reportMetaRow: {
+  reportFooter: {
+    minHeight: 36,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.sm,
     flexDirection: 'row',
-    gap: spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
   },
 
-  metaChip: {
+  footerInfo: {
     flex: 1,
-    minHeight: 32,
-    backgroundColor: '#F8FAFC',
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
   },
 
-  metaText: {
+  footerText: {
     flex: 1,
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: typography.weight.semibold,
+  },
+
+  gravityInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+
+  gravityLabel: {
     fontSize: 11,
     color: colors.textSecondary,
     fontWeight: typography.weight.semibold,
+  },
+
+  gravityValue: {
+    fontSize: 11,
+    fontWeight: typography.weight.bold,
   },
 
   emptyCard: {
@@ -650,8 +734,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
 
   skeletonStatsRow: {
@@ -662,7 +746,7 @@ const styles = StyleSheet.create({
 
   skeletonStatBox: {
     flex: 1,
-    height: 64,
+    height: 52,
     backgroundColor: '#E5E7EB',
     borderRadius: radius.md,
   },

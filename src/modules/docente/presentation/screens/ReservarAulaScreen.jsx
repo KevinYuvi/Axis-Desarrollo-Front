@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -13,13 +13,34 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/clerk-expo';
+import { useFocusEffect } from 'expo-router';
 
+import { crearConexionRealtime } from '../../../../shared/realtime/realtimeClient';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 const CLERK_JWT_TEMPLATE = 'Axis';
+
+const HORA_INICIO_DIA = 7;
+const HORA_FIN_DIA = 22;
+
+const DIAS_SEMANA = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const MESES = [
+  'Ene',
+  'Feb',
+  'Mar',
+  'Abr',
+  'May',
+  'Jun',
+  'Jul',
+  'Ago',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dic',
+];
 
 export default function ReservarAulaScreen({ token, onBack }) {
   const { getToken } = useAuth();
@@ -36,9 +57,15 @@ export default function ReservarAulaScreen({ token, onBack }) {
   const [guardando, setGuardando] = useState(false);
 
   const [modalAulasVisible, setModalAulasVisible] = useState(false);
-  const [modalFechaVisible, setModalFechaVisible] = useState(false);
   const [modalHoraInicioVisible, setModalHoraInicioVisible] = useState(false);
   const [modalHoraFinVisible, setModalHoraFinVisible] = useState(false);
+
+  const [errores, setErrores] = useState({
+    aula: '',
+    fecha: '',
+    horaInicio: '',
+    horaFin: '',
+  });
 
   const [modalFeedbackVisible, setModalFeedbackVisible] = useState(false);
   const [feedbackTipo, setFeedbackTipo] = useState('info');
@@ -46,18 +73,59 @@ export default function ReservarAulaScreen({ token, onBack }) {
   const [feedbackMensaje, setFeedbackMensaje] = useState('');
   const [feedbackAccion, setFeedbackAccion] = useState(null);
 
+  useFocusEffect(
+    useCallback(() => {
+      cargarEspacios();
+
+      const realtime = crearConexionRealtime({
+        onEvento: (evento) => {
+          if (evento.tipo === 'aulas_actualizadas') {
+            cargarEspacios();
+          }
+        },
+      });
+
+      return () => {
+        realtime?.cerrar();
+        limpiarFormulario();
+      };
+    }, [])
+  );
+
   useEffect(() => {
-    cargarEspacios();
-  }, []);
+    if (!modalFeedbackVisible || feedbackTipo !== 'success') return;
+
+    const timer = setTimeout(() => {
+      cerrarFeedback();
+    }, 1400);
+
+    return () => clearTimeout(timer);
+  }, [modalFeedbackVisible, feedbackTipo]);
+
+  const limpiarFormulario = () => {
+    setEspacioSeleccionado(null);
+    setFechaSeleccionada(null);
+    setHoraInicio(null);
+    setHoraFin(null);
+    setModalAulasVisible(false);
+    setModalHoraInicioVisible(false);
+    setModalHoraFinVisible(false);
+    setErrores({
+      aula: '',
+      fecha: '',
+      horaInicio: '',
+      horaFin: '',
+    });
+  };
 
   const obtenerTokenActual = async () => {
-    const tokenActual = await getToken({
+    const tokenClerk = await getToken({
       template: CLERK_JWT_TEMPLATE,
       skipCache: true,
     });
 
-    if (tokenActual) {
-      return tokenActual;
+    if (tokenClerk) {
+      return tokenClerk;
     }
 
     if (token) {
@@ -169,47 +237,170 @@ export default function ReservarAulaScreen({ token, onBack }) {
 
     hoy.setHours(0, 0, 0, 0);
 
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 10; i++) {
       const fecha = new Date(hoy);
       fecha.setDate(hoy.getDate() + i);
-      fechas.push(formatearFechaLocal(fecha));
+
+      const value = formatearFechaLocal(fecha);
+
+      fechas.push({
+        value,
+        diaSemana: i === 0 ? 'Hoy' : DIAS_SEMANA[fecha.getDay()],
+        diaNumero: fecha.getDate(),
+        mes: MESES[fecha.getMonth()],
+        textoCompleto: `${DIAS_SEMANA[fecha.getDay()]}, ${fecha.getDate()} ${
+          MESES[fecha.getMonth()]
+        }`,
+      });
     }
 
     return fechas;
   };
 
-  const generarHoras = () => {
+  const redondearSiguienteMediaHora = (fecha) => {
+    const copia = new Date(fecha);
+    const minutos = copia.getMinutes();
+
+    if (minutos === 0) {
+      copia.setMinutes(30, 0, 0);
+    } else if (minutos <= 30) {
+      copia.setMinutes(30, 0, 0);
+    } else {
+      copia.setHours(copia.getHours() + 1, 0, 0, 0);
+    }
+
+    return copia;
+  };
+
+  const generarHorasDisponibles = ({ paraFin = false } = {}) => {
+    if (!fechaSeleccionada) return [];
+
     const horas = [];
+    const ahora = new Date();
+    const fechaHoyTexto = formatearFechaLocal(ahora);
+    const esHoy = fechaSeleccionada === fechaHoyTexto;
+    const minimoHoy = redondearSiguienteMediaHora(ahora);
+    const minimoHoyMinutos =
+      minimoHoy.getHours() * 60 + minimoHoy.getMinutes();
 
-    for (let h = 0; h <= 23; h++) {
-      const hora = h.toString().padStart(2, '0');
+    const minimoFin = horaInicio ? convertirMinutos(horaInicio) + 30 : null;
 
-      horas.push(`${hora}:00`);
-      horas.push(`${hora}:30`);
+    for (let h = HORA_INICIO_DIA; h <= HORA_FIN_DIA; h++) {
+      for (const minuto of [0, 30]) {
+        if (h === HORA_FIN_DIA && minuto > 0) continue;
+
+        const horaTexto = `${String(h).padStart(2, '0')}:${String(
+          minuto
+        ).padStart(2, '0')}`;
+
+        const minutosActuales = h * 60 + minuto;
+
+        if (esHoy && minutosActuales < minimoHoyMinutos) {
+          continue;
+        }
+
+        if (paraFin && minimoFin !== null && minutosActuales < minimoFin) {
+          continue;
+        }
+
+        horas.push(horaTexto);
+      }
     }
 
     return horas;
   };
 
-  const crearReserva = async () => {
-    if (!espacioSeleccionado || !fechaSeleccionada || !horaInicio || !horaFin) {
-      mostrarFeedback({
-        tipo: 'warning',
-        titulo: 'Datos incompletos',
-        mensaje: 'Selecciona aula, fecha y horario para continuar.',
-      });
+  const limpiarErrorCampo = (campo) => {
+    setErrores((prev) => ({
+      ...prev,
+      [campo]: '',
+    }));
+  };
+
+  const validarFormularioReserva = () => {
+    const nuevosErrores = {
+      aula: '',
+      fecha: '',
+      horaInicio: '',
+      horaFin: '',
+    };
+
+    if (!espacioSeleccionado) {
+      nuevosErrores.aula = 'Selecciona un aula o laboratorio.';
+    }
+
+    if (!fechaSeleccionada) {
+      nuevosErrores.fecha = 'Selecciona la fecha de la reserva.';
+    }
+
+    if (!horaInicio) {
+      nuevosErrores.horaInicio = 'Selecciona la hora de inicio.';
+    }
+
+    if (!horaFin) {
+      nuevosErrores.horaFin = 'Selecciona la hora de fin.';
+    }
+
+    if (horaInicio && horaFin) {
+      const inicioMinutos = convertirMinutos(horaInicio);
+      const finMinutos = convertirMinutos(horaFin);
+
+      if (finMinutos <= inicioMinutos) {
+        nuevosErrores.horaFin = 'La hora de fin debe ser posterior al inicio.';
+      }
+    }
+
+    setErrores(nuevosErrores);
+
+    return !Object.values(nuevosErrores).some(Boolean);
+  };
+
+  const seleccionarFecha = (fecha) => {
+    setFechaSeleccionada(fecha.value);
+    setHoraInicio(null);
+    setHoraFin(null);
+    limpiarErrorCampo('fecha');
+    limpiarErrorCampo('horaInicio');
+    limpiarErrorCampo('horaFin');
+  };
+
+  const seleccionarHoraInicio = (hora) => {
+    setHoraInicio(hora);
+    limpiarErrorCampo('horaInicio');
+    setModalHoraInicioVisible(false);
+
+    if (horaFin && convertirMinutos(horaFin) <= convertirMinutos(hora)) {
+      setHoraFin(null);
+      limpiarErrorCampo('horaFin');
+    }
+  };
+
+  const seleccionarHoraFin = (hora) => {
+    if (!horaInicio) {
+      setErrores((prev) => ({
+        ...prev,
+        horaInicio: 'Primero selecciona la hora de inicio.',
+      }));
       return;
     }
 
-    const inicioMinutos = convertirMinutos(horaInicio);
-    const finMinutos = convertirMinutos(horaFin);
+    if (convertirMinutos(hora) <= convertirMinutos(horaInicio)) {
+      setErrores((prev) => ({
+        ...prev,
+        horaFin: 'La hora de fin debe ser posterior al inicio.',
+      }));
+      return;
+    }
 
-    if (finMinutos <= inicioMinutos) {
-      mostrarFeedback({
-        tipo: 'warning',
-        titulo: 'Horario inválido',
-        mensaje: 'La hora de fin debe ser posterior a la hora de inicio.',
-      });
+    setHoraFin(hora);
+    limpiarErrorCampo('horaFin');
+    setModalHoraFinVisible(false);
+  };
+
+  const crearReserva = async () => {
+    const formularioValido = validarFormularioReserva();
+
+    if (!formularioValido) {
       return;
     }
 
@@ -249,7 +440,10 @@ export default function ReservarAulaScreen({ token, onBack }) {
         tipo: 'success',
         titulo: 'Reserva creada',
         mensaje: 'El aula fue reservada correctamente.',
-        accion: onBack,
+        accion: () => {
+          limpiarFormulario();
+          if (onBack) onBack();
+        },
       });
     } catch (error) {
       console.error('Error creando reserva:', error);
@@ -269,6 +463,7 @@ export default function ReservarAulaScreen({ token, onBack }) {
       style={styles.optionCard}
       onPress={() => {
         setEspacioSeleccionado(item);
+        limpiarErrorCampo('aula');
         setModalAulasVisible(false);
       }}
       activeOpacity={0.85}
@@ -291,71 +486,12 @@ export default function ReservarAulaScreen({ token, onBack }) {
     </TouchableOpacity>
   );
 
-  const renderFecha = ({ item }) => (
-    <TouchableOpacity
-      style={styles.optionCard}
-      onPress={() => {
-        setFechaSeleccionada(item);
-        setModalFechaVisible(false);
-      }}
-      activeOpacity={0.85}
-    >
-      <View style={styles.optionIconBox}>
-        <Ionicons name="calendar-outline" size={21} color={colors.primary} />
-      </View>
+  const fechasDisponibles = generarFechas();
+  const horasInicioDisponibles = generarHorasDisponibles();
+  const horasFinDisponibles = generarHorasDisponibles({ paraFin: true });
 
-      <Text style={styles.optionTitle}>{item}</Text>
-    </TouchableOpacity>
-  );
-
-  const renderHoraInicio = ({ item }) => (
-    <TouchableOpacity
-      style={styles.optionCard}
-      onPress={() => {
-        setHoraInicio(item);
-        setModalHoraInicioVisible(false);
-
-        if (horaFin && convertirMinutos(horaFin) <= convertirMinutos(item)) {
-          setHoraFin(null);
-        }
-      }}
-      activeOpacity={0.85}
-    >
-      <View style={styles.optionIconBox}>
-        <Ionicons name="time-outline" size={21} color={colors.primary} />
-      </View>
-
-      <Text style={styles.optionTitle}>{item}</Text>
-    </TouchableOpacity>
-  );
-
-  const renderHoraFin = ({ item }) => (
-    <TouchableOpacity
-      style={styles.optionCard}
-      onPress={() => {
-        if (
-          horaInicio &&
-          convertirMinutos(item) <= convertirMinutos(horaInicio)
-        ) {
-          mostrarFeedback({
-            tipo: 'warning',
-            titulo: 'Horario inválido',
-            mensaje: 'La hora de fin debe ser posterior a la hora de inicio.',
-          });
-          return;
-        }
-
-        setHoraFin(item);
-        setModalHoraFinVisible(false);
-      }}
-      activeOpacity={0.85}
-    >
-      <View style={styles.optionIconBox}>
-        <Ionicons name="time-outline" size={21} color={colors.primary} />
-      </View>
-
-      <Text style={styles.optionTitle}>{item}</Text>
-    </TouchableOpacity>
+  const fechaVisible = fechasDisponibles.find(
+    (item) => item.value === fechaSeleccionada
   );
 
   return (
@@ -409,7 +545,7 @@ export default function ReservarAulaScreen({ token, onBack }) {
           <Text style={styles.inputLabel}>Aula / Laboratorio</Text>
 
           <TouchableOpacity
-            style={styles.selectBox}
+            style={[styles.selectBox, errores.aula && styles.selectBoxError]}
             onPress={() => setModalAulasVisible(true)}
             disabled={loadingEspacios}
             activeOpacity={0.85}
@@ -439,83 +575,175 @@ export default function ReservarAulaScreen({ token, onBack }) {
               <Ionicons
                 name="business-outline"
                 size={20}
-                color={colors.textSecondary}
+                color={errores.aula ? '#DC2626' : colors.textSecondary}
               />
             )}
           </TouchableOpacity>
 
-          <Text style={styles.inputLabel}>Fecha</Text>
+          {errores.aula ? (
+            <Text style={styles.errorFieldText}>{errores.aula}</Text>
+          ) : null}
 
-          <TouchableOpacity
-            style={styles.selectBox}
-            onPress={() => setModalFechaVisible(true)}
-            activeOpacity={0.85}
-          >
-            <Text
-              style={[
-                styles.selectText,
-                !fechaSeleccionada && styles.placeholderText,
-              ]}
+          <View style={styles.sectionBlock}>
+            <View style={styles.sectionTitleRow}>
+              <View>
+                <Text style={styles.inputLabelNoMargin}>Fecha</Text>
+                <Text style={styles.helperText}>
+                  Escoge el día viendo también la semana.
+                </Text>
+              </View>
+
+              {fechaVisible && (
+                <View style={styles.selectedMiniChip}>
+                  <Text style={styles.selectedMiniChipText}>
+                    {fechaVisible.textoCompleto}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.dateRow}
             >
-              {fechaSeleccionada || 'Seleccionar fecha'}
-            </Text>
+              {fechasDisponibles.map((fecha) => {
+                const active = fechaSeleccionada === fecha.value;
 
-            <Ionicons
-              name="calendar-outline"
-              size={20}
-              color={colors.textSecondary}
-            />
-          </TouchableOpacity>
+                return (
+                  <TouchableOpacity
+                    key={fecha.value}
+                    style={[
+                      styles.dateCard,
+                      active && styles.dateCardActive,
+                      errores.fecha && styles.dateCardError,
+                    ]}
+                    onPress={() => seleccionarFecha(fecha)}
+                    activeOpacity={0.85}
+                  >
+                    <Text
+                      style={[
+                        styles.dateDayText,
+                        active && styles.dateTextActive,
+                      ]}
+                    >
+                      {fecha.diaSemana}
+                    </Text>
+
+                    <Text
+                      style={[
+                        styles.dateNumberText,
+                        active && styles.dateTextActive,
+                      ]}
+                    >
+                      {fecha.diaNumero}
+                    </Text>
+
+                    <Text
+                      style={[
+                        styles.dateMonthText,
+                        active && styles.dateTextActive,
+                      ]}
+                    >
+                      {fecha.mes}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {errores.fecha ? (
+              <Text style={styles.errorFieldText}>{errores.fecha}</Text>
+            ) : null}
+          </View>
 
           <View style={styles.timeRow}>
             <View style={styles.timeColumn}>
               <Text style={styles.inputLabel}>Hora inicio</Text>
 
               <TouchableOpacity
-                style={styles.selectBox}
-                onPress={() => setModalHoraInicioVisible(true)}
+                style={[
+                  styles.selectBox,
+                  errores.horaInicio && styles.selectBoxError,
+                ]}
+                onPress={() => {
+                  if (!fechaSeleccionada) {
+                    setErrores((prev) => ({
+                      ...prev,
+                      fecha: 'Primero selecciona la fecha.',
+                    }));
+                    return;
+                  }
+
+                  setModalHoraInicioVisible(true);
+                }}
                 activeOpacity={0.85}
               >
-                <Text
-                  style={[
-                    styles.selectText,
-                    !horaInicio && styles.placeholderText,
-                  ]}
-                >
-                  {horaInicio || 'Inicio'}
-                </Text>
+                <View style={styles.selectTextBox}>
+                  <Text
+                    style={[
+                      styles.selectText,
+                      !horaInicio && styles.placeholderText,
+                    ]}
+                  >
+                    {horaInicio || 'Inicio'}
+                  </Text>
+                </View>
 
                 <Ionicons
                   name="time-outline"
                   size={20}
-                  color={colors.textSecondary}
+                  color={errores.horaInicio ? '#DC2626' : colors.textSecondary}
                 />
               </TouchableOpacity>
+
+              {errores.horaInicio ? (
+                <Text style={styles.errorFieldText}>{errores.horaInicio}</Text>
+              ) : null}
             </View>
 
             <View style={styles.timeColumn}>
               <Text style={styles.inputLabel}>Hora fin</Text>
 
               <TouchableOpacity
-                style={styles.selectBox}
-                onPress={() => setModalHoraFinVisible(true)}
+                style={[
+                  styles.selectBox,
+                  errores.horaFin && styles.selectBoxError,
+                ]}
+                onPress={() => {
+                  if (!horaInicio) {
+                    setErrores((prev) => ({
+                      ...prev,
+                      horaInicio: 'Primero selecciona la hora de inicio.',
+                    }));
+                    return;
+                  }
+
+                  setModalHoraFinVisible(true);
+                }}
                 activeOpacity={0.85}
               >
-                <Text
-                  style={[
-                    styles.selectText,
-                    !horaFin && styles.placeholderText,
-                  ]}
-                >
-                  {horaFin || 'Fin'}
-                </Text>
+                <View style={styles.selectTextBox}>
+                  <Text
+                    style={[
+                      styles.selectText,
+                      !horaFin && styles.placeholderText,
+                    ]}
+                  >
+                    {horaFin || 'Fin'}
+                  </Text>
+                </View>
 
                 <Ionicons
                   name="time-outline"
                   size={20}
-                  color={colors.textSecondary}
+                  color={errores.horaFin ? '#DC2626' : colors.textSecondary}
                 />
               </TouchableOpacity>
+
+              {errores.horaFin ? (
+                <Text style={styles.errorFieldText}>{errores.horaFin}</Text>
+              ) : null}
             </View>
           </View>
 
@@ -550,31 +778,24 @@ export default function ReservarAulaScreen({ token, onBack }) {
         emptyText="No hay aulas registradas."
       />
 
-      <SelectorModal
-        visible={modalFechaVisible}
-        title="Seleccionar fecha"
-        onClose={() => setModalFechaVisible(false)}
-        data={generarFechas()}
-        renderItem={renderFecha}
-        emptyText="No hay fechas disponibles."
-      />
-
-      <SelectorModal
+      <TimeSelectorModal
         visible={modalHoraInicioVisible}
         title="Hora de inicio"
+        subtitle="Solo se muestran horarios disponibles."
+        data={horasInicioDisponibles}
+        selected={horaInicio}
+        onSelect={seleccionarHoraInicio}
         onClose={() => setModalHoraInicioVisible(false)}
-        data={generarHoras()}
-        renderItem={renderHoraInicio}
-        emptyText="No hay horas disponibles."
       />
 
-      <SelectorModal
+      <TimeSelectorModal
         visible={modalHoraFinVisible}
         title="Hora de fin"
+        subtitle="Debe ser posterior a la hora de inicio."
+        data={horasFinDisponibles}
+        selected={horaFin}
+        onSelect={seleccionarHoraFin}
         onClose={() => setModalHoraFinVisible(false)}
-        data={generarHoras()}
-        renderItem={renderHoraFin}
-        emptyText="No hay horas disponibles."
       />
 
       <FeedbackModal
@@ -636,14 +857,90 @@ function SelectorModal({ visible, title, onClose, data, renderItem, emptyText })
   );
 }
 
+function TimeSelectorModal({
+  visible,
+  title,
+  subtitle,
+  data,
+  selected,
+  onSelect,
+  onClose,
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlayBottom}>
+        <View style={styles.timeModalContent}>
+          <View style={styles.modalHandle} />
+
+          <View style={styles.modalHeader}>
+            <View>
+              <Text style={styles.modalTitle}>{title}</Text>
+              <Text style={styles.timeModalSubtitle}>{subtitle}</Text>
+            </View>
+
+            <TouchableOpacity style={styles.modalCloseBtn} onPress={onClose}>
+              <Ionicons name="close" size={20} color={colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
+
+          {data?.length > 0 ? (
+            <View style={styles.timeModalGrid}>
+              {data.map((hora) => {
+                const active = selected === hora;
+
+                return (
+                  <TouchableOpacity
+                    key={hora}
+                    style={[
+                      styles.timeModalChip,
+                      active && styles.timeModalChipActive,
+                    ]}
+                    onPress={() => onSelect(hora)}
+                    activeOpacity={0.85}
+                  >
+                    <Text
+                      style={[
+                        styles.timeModalChipText,
+                        active && styles.timeModalChipTextActive,
+                      ]}
+                    >
+                      {hora}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={styles.emptyModal}>
+              <Ionicons
+                name="time-outline"
+                size={34}
+                color={colors.textMuted}
+              />
+
+              <Text style={styles.emptyModalText}>
+                No hay horarios disponibles.
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function FeedbackModal({ visible, tipo, titulo, mensaje, onClose }) {
   const config = {
     success: {
       icon: 'checkmark-circle-outline',
       color: '#16A34A',
       bg: '#DCFCE7',
-      button: colors.primary,
-      label: 'Aceptar',
+      label: 'Creado correctamente',
     },
     error: {
       icon: 'alert-circle-outline',
@@ -669,31 +966,38 @@ function FeedbackModal({ visible, tipo, titulo, mensaje, onClose }) {
   };
 
   const item = config[tipo] || config.info;
+  const esSuccess = tipo === 'success';
 
   return (
     <Modal
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={esSuccess ? undefined : onClose}
     >
       <View style={styles.feedbackOverlay}>
         <View style={styles.feedbackCard}>
           <View style={[styles.feedbackIconBox, { backgroundColor: item.bg }]}>
-            <Ionicons name={item.icon} size={32} color={item.color} />
+            <Ionicons name={item.icon} size={36} color={item.color} />
           </View>
 
           <Text style={styles.feedbackTitle}>{titulo}</Text>
 
           <Text style={styles.feedbackMessage}>{mensaje}</Text>
 
-          <TouchableOpacity
-            style={[styles.feedbackBtn, { backgroundColor: item.button }]}
-            onPress={onClose}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.feedbackBtnText}>{item.label}</Text>
-          </TouchableOpacity>
+          {esSuccess ? (
+            <View style={styles.successPill}>
+              <ActivityIndicator size="small" color="#16A34A" />
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.feedbackBtn, { backgroundColor: item.button }]}
+              onPress={onClose}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.feedbackBtnText}>{item.label}</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </Modal>
@@ -795,6 +1099,20 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
+  inputLabelNoMargin: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontWeight: typography.weight.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+  },
+
+  helperText: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 3,
+  },
+
   selectBox: {
     minHeight: 54,
     backgroundColor: colors.background,
@@ -807,6 +1125,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+
+  selectBoxError: {
+    borderColor: '#DC2626',
+    backgroundColor: '#FEF2F2',
   },
 
   selectTextBox: {
@@ -829,6 +1152,88 @@ const styles = StyleSheet.create({
   placeholderText: {
     color: colors.textMuted,
     fontWeight: typography.weight.semibold,
+  },
+
+  errorFieldText: {
+    fontSize: 11,
+    color: '#DC2626',
+    fontWeight: typography.weight.bold,
+    marginTop: -6,
+    marginBottom: spacing.sm,
+    lineHeight: 16,
+  },
+
+  sectionBlock: {
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+  },
+
+  sectionTitleRow: {
+    marginBottom: spacing.sm,
+  },
+
+  selectedMiniChip: {
+    marginTop: spacing.sm,
+    alignSelf: 'flex-start',
+    borderRadius: radius.full,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+  },
+
+  selectedMiniChipText: {
+    fontSize: 11,
+    color: colors.primary,
+    fontWeight: typography.weight.bold,
+  },
+
+  dateRow: {
+    paddingRight: spacing.lg,
+  },
+
+  dateCard: {
+    width: 76,
+    minHeight: 92,
+    borderRadius: radius.md,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+
+  dateCardActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+
+  dateCardError: {
+    borderColor: '#FCA5A5',
+  },
+
+  dateDayText: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontWeight: typography.weight.bold,
+  },
+
+  dateNumberText: {
+    fontSize: 24,
+    color: colors.textPrimary,
+    fontWeight: typography.weight.bold,
+    marginTop: 4,
+  },
+
+  dateMonthText: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontWeight: typography.weight.bold,
+    marginTop: 2,
+  },
+
+  dateTextActive: {
+    color: colors.white,
   },
 
   timeRow: {
@@ -880,6 +1285,18 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
 
+  timeModalContent: {
+    width: '100%',
+    maxWidth: 430,
+    maxHeight: '62%',
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 24,
+  },
+
   modalHandle: {
     width: 42,
     height: 5,
@@ -900,6 +1317,12 @@ const styles = StyleSheet.create({
     fontSize: typography.size.lg,
     fontWeight: typography.weight.bold,
     color: colors.textPrimary,
+  },
+
+  timeModalSubtitle: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    marginTop: 3,
   },
 
   modalCloseBtn: {
@@ -942,6 +1365,39 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     marginTop: 3,
+  },
+
+  timeModalGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+
+  timeModalChip: {
+    minWidth: 76,
+    minHeight: 42,
+    borderRadius: radius.full,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+
+  timeModalChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+
+  timeModalChipText: {
+    fontSize: typography.size.xs,
+    color: colors.textPrimary,
+    fontWeight: typography.weight.bold,
+  },
+
+  timeModalChipTextActive: {
+    color: colors.white,
   },
 
   emptyModal: {
@@ -1010,5 +1466,21 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     fontWeight: typography.weight.bold,
     color: colors.white,
+  },
+
+  successPill: {
+    minHeight: 42,
+    borderRadius: radius.full,
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  successPillText: {
+    marginLeft: spacing.xs,
+    fontSize: typography.size.xs,
+    color: '#16A34A',
+    fontWeight: typography.weight.bold,
   },
 });

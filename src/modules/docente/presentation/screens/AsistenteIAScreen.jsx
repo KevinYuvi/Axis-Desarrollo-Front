@@ -16,10 +16,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/clerk-expo';
 
+import AppHeader from '../../../../shared/components/organisms/AppHeader';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
-import { AppHeader } from '../../../../shared/components';
 
 import {
   AudioModule,
@@ -39,7 +39,7 @@ const preguntasRapidas = [
   'El proyector del Laboratorio 3 no enciende.',
 ];
 
-export default function AsistenteIAScreen({ token, onBack, rol }) {
+export default function AsistenteIAScreen({ token, rol }) {
   const { getToken } = useAuth();
 
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -106,6 +106,53 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
     } catch {
       return valorInicial;
     }
+  };
+
+  const convertirErrorAtexto = (errorData) => {
+    if (!errorData) {
+      return 'No se pudo procesar la solicitud.';
+    }
+
+    if (typeof errorData === 'string') {
+      return errorData;
+    }
+
+    if (Array.isArray(errorData)) {
+      return errorData
+        .map((item) => convertirErrorAtexto(item))
+        .filter(Boolean)
+        .join('\n');
+    }
+
+    if (typeof errorData === 'object') {
+      if (errorData.msg) {
+        const campo = Array.isArray(errorData.loc)
+          ? errorData.loc.filter((item) => item !== 'body').join(' > ')
+          : '';
+
+        return campo ? `${campo}: ${errorData.msg}` : errorData.msg;
+      }
+
+      if (errorData.message) {
+        return convertirErrorAtexto(errorData.message);
+      }
+
+      if (errorData.detail) {
+        return convertirErrorAtexto(errorData.detail);
+      }
+
+      if (errorData.error) {
+        return convertirErrorAtexto(errorData.error);
+      }
+
+      try {
+        return JSON.stringify(errorData, null, 2);
+      } catch {
+        return 'No se pudo procesar la solicitud.';
+      }
+    }
+
+    return String(errorData);
   };
 
   const validarApiUrl = () => {
@@ -310,7 +357,11 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
       const data = await leerRespuestaSegura(response, {});
 
       if (!response.ok) {
-        throw new Error(data?.detail || 'No se pudo procesar la solicitud.');
+        console.log('ERROR BACKEND IA:', data);
+
+        const mensajeError = convertirErrorAtexto(data);
+
+        throw new Error(mensajeError || 'No se pudo procesar la solicitud.');
       }
 
       agregarMensaje({
@@ -363,6 +414,7 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
                 size={16}
                 color={esUsuario ? colors.white : colors.primary}
               />
+
               <Text
                 style={[
                   styles.messageText,
@@ -414,6 +466,7 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
                   disabled={enviando}
                 >
                   <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+
                   <Text style={styles.confirmYesText}>Sí</Text>
                 </TouchableOpacity>
 
@@ -423,6 +476,7 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
                   disabled={enviando}
                 >
                   <Ionicons name="close" size={16} color="#DC2626" />
+
                   <Text style={styles.confirmNoText}>No</Text>
                 </TouchableOpacity>
               </View>
@@ -514,33 +568,24 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
     <SafeAreaView style={styles.screen} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
 
-      {onBack ? (
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={onBack}
-            accessibilityLabel="Volver"
-          >
-            <Ionicons name="arrow-back" size={22} color={colors.primary} />
-          </TouchableOpacity>
+      <AppHeader rol={rol || 'docente'} />
 
-          <View style={styles.headerBrand}>
-            <View style={styles.headerIcon}>
-              <Ionicons
-                name="hardware-chip-outline"
-                size={17}
-                color={colors.white}
-              />
-            </View>
-
-            <Text style={styles.headerTitle}>Asistente IA</Text>
-          </View>
-
-          <View style={styles.headerSpacer} />
+      <View style={styles.pageHeader}>
+        <View style={styles.pageIcon}>
+          <Ionicons
+            name="hardware-chip-outline"
+            size={17}
+            color={colors.primary}
+          />
         </View>
-      ) : (
-        <AppHeader rol={rol || 'estudiante'} />
-      )}
+
+        <View style={styles.pageHeaderText}>
+          <Text style={styles.pageTitle}>Asistente IA</Text>
+          <Text style={styles.pageSubtitle}>
+            Consulta aulas, clases e incidencias
+          </Text>
+        </View>
+      </View>
 
       <KeyboardAvoidingView
         style={styles.body}
@@ -649,7 +694,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
   },
 
-  header: {
+  pageHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
@@ -659,40 +704,30 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
 
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#F8FAFC',
+  pageIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.sm,
   },
 
-  headerBrand: {
+  pageHeaderText: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
   },
 
-  headerIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  headerTitle: {
+  pageTitle: {
     fontSize: typography.size.md,
     fontWeight: typography.weight.bold,
     color: colors.textPrimary,
   },
 
-  headerSpacer: {
-    width: 38,
+  pageSubtitle: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    marginTop: 1,
   },
 
   body: {
