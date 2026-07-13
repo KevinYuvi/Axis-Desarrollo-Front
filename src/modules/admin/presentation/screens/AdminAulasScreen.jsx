@@ -6,7 +6,6 @@ import {
   StatusBar,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -18,7 +17,19 @@ import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
 import { AppHeader } from '../../../../shared/components';
 
-import { obtenerAulasAdmin } from '../../services/adminApi';
+import {
+  obtenerAulasAdmin,
+  crearAulaAdmin,
+  actualizarAulaAdmin,
+  cambiarEstadoAulaAdmin,
+} from '../../services/adminApi';
+
+import AulaCard from '../components/aulas/AulaCard';
+import AulaFormModal from '../components/aulas/AulaFormModal';
+import AulaStatusModal from '../components/aulas/AulaStatusModal';
+import AulaSummaryCompact from '../components/aulas/AulaSummaryCompact';
+import AdminToast from '../components/aulas/AdminToast';
+import SkeletonAulas from '../components/aulas/SkeletonAulas';
 
 const CLERK_JWT_TEMPLATE = 'Axis';
 
@@ -29,14 +40,70 @@ const FILTROS = [
   { key: 'mantenimiento', label: 'Mantenimiento' },
 ];
 
+const FORM_INICIAL = {
+  nombre: '',
+  ubicacion: '',
+  bloque: '',
+  capacidad: '',
+  tipo: 'aula',
+
+  proyector: false,
+  computadoras: false,
+  cantidadComputadoras: '',
+  parlantes: false,
+  pizarra: false,
+
+  equipamientoTexto: '',
+  estado_actual: 'disponible',
+};
+
 export default function AdminAulasScreen() {
   const router = useRouter();
   const { getToken } = useAuth();
 
   const [aulas, setAulas] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [formError, setFormError] = useState('');
+  const [guardandoFormulario, setGuardandoFormulario] = useState(false);
+  const [guardandoEstado, setGuardandoEstado] = useState(false);
+  const [estadoGuardando, setEstadoGuardando] = useState(null);
+
   const [error, setError] = useState('');
   const [filtroActivo, setFiltroActivo] = useState('todos');
+
+  const [modalFormularioVisible, setModalFormularioVisible] = useState(false);
+  const [modalEstadoVisible, setModalEstadoVisible] = useState(false);
+
+  const [aulaSeleccionada, setAulaSeleccionada] = useState(null);
+  const [modoFormulario, setModoFormulario] = useState('crear');
+  const [form, setForm] = useState(FORM_INICIAL);
+
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastTipo, setToastTipo] = useState('success');
+  const [toastMensaje, setToastMensaje] = useState('');
+
+  const obtenerTokenActual = async () => {
+    const token = await getToken({
+      template: CLERK_JWT_TEMPLATE,
+      skipCache: true,
+    });
+
+    if (!token) {
+      throw new Error('No se pudo obtener una sesión activa.');
+    }
+
+    return token;
+  };
+
+  const mostrarToast = ({ tipo = 'success', mensaje }) => {
+    setToastTipo(tipo);
+    setToastMensaje(mensaje);
+    setToastVisible(false);
+
+    setTimeout(() => {
+      setToastVisible(true);
+    }, 80);
+  };
 
   const cargarAulas = async ({ silencioso = false } = {}) => {
     try {
@@ -46,10 +113,7 @@ export default function AdminAulasScreen() {
 
       setError('');
 
-      const token = await getToken({
-        template: CLERK_JWT_TEMPLATE,
-      });
-
+      const token = await obtenerTokenActual();
       const data = await obtenerAulasAdmin(token);
 
       setAulas(Array.isArray(data) ? data : []);
@@ -66,6 +130,259 @@ export default function AdminAulasScreen() {
       cargarAulas({ silencioso: true });
     }, [])
   );
+
+  const limpiarFormulario = () => {
+    setForm(FORM_INICIAL);
+    setAulaSeleccionada(null);
+    setModoFormulario('crear');
+  };
+
+  const abrirCrearAula = () => {
+    limpiarFormulario();
+    setFormError('');
+    setModoFormulario('crear');
+    setModalFormularioVisible(true);
+  };
+
+  const abrirEditarAula = (aula) => {
+
+    const equipamientoLista = Array.isArray(aula.equipamiento)
+      ? aula.equipamiento
+      : [];
+
+    const tieneProyector = equipamientoLista.some((item) =>
+      String(item).toLowerCase().includes('proyector')
+    );
+
+    const tieneParlantes = equipamientoLista.some((item) =>
+      String(item).toLowerCase().includes('parlantes')
+    );
+
+    const tienePizarra = equipamientoLista.some((item) =>
+      String(item).toLowerCase().includes('pizarra')
+    );
+
+    const computadorasItem = equipamientoLista.find((item) =>
+      String(item).toLowerCase().includes('computadoras')
+    );
+
+    const cantidadComputadoras = computadorasItem
+      ? String(computadorasItem).replace(/\D/g, '')
+      : '';
+
+    setAulaSeleccionada(aula);
+    setModoFormulario('editar');
+    setFormError('');
+
+    setForm({
+      nombre: aula.nombre || '',
+      ubicacion: aula.ubicacion || '',
+      bloque: aula.bloque || '',
+      capacidad: aula.capacidad ? String(aula.capacidad) : '',
+      tipo: aula.tipo || '',
+      equipamientoTexto: '',
+      proyector: tieneProyector,
+      parlantes: tieneParlantes,
+      pizarra: tienePizarra,
+      computadoras: Boolean(computadorasItem),
+      cantidadComputadoras,
+      estado_actual: aula.estado_actual || 'disponible',
+    });
+
+    setModalFormularioVisible(true);
+  };
+
+  const abrirCambiarEstado = (aula) => {
+    setAulaSeleccionada(aula);
+    setEstadoGuardando(null);
+    setModalEstadoVisible(true);
+  };
+
+  const cerrarFormulario = () => {
+    if (guardandoFormulario) return;
+
+    setModalFormularioVisible(false);
+    limpiarFormulario();
+  };
+
+  const actualizarCampo = (campo, valor) => {
+    setFormError('');
+
+    setForm((prev) => ({
+      ...prev,
+      [campo]: valor,
+    }));
+  };
+
+  const construirPayload = () => {
+    const equipamiento = [];
+
+    if (form.proyector) {
+      equipamiento.push('proyector');
+    }
+
+    if (form.computadoras) {
+      equipamiento.push(
+        `computadoras: ${Number(form.cantidadComputadoras || 0)}`
+      );
+    }
+
+    if (form.parlantes) {
+      equipamiento.push('parlantes');
+    }
+
+    if (form.pizarra) {
+      equipamiento.push('pizarra');
+    }
+
+    const extras = form.equipamientoTexto
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    equipamiento.push(...extras);
+
+    return {
+      nombre: form.nombre.trim(),
+      ubicacion: form.ubicacion.trim(),
+      bloque: form.bloque.trim(),
+      capacidad: Number(form.capacidad),
+      tipo: form.tipo,
+      equipamiento,
+      estado_actual: form.estado_actual,
+    };
+  };
+
+  const validarFormulario = () => {
+    if (!form.nombre.trim()) {
+      return 'Ingresa el nombre del aula.';
+    }
+
+    if (!form.ubicacion.trim()) {
+      return 'Ingresa la ubicación del aula.';
+    }
+
+    if (!form.bloque.trim()) {
+      return 'Ingresa el bloque del aula.';
+    }
+
+    if (!['aula', 'laboratorio'].includes(form.tipo)) {
+      return 'Selecciona un tipo válido: aula o laboratorio.';
+    }
+
+    if (!form.capacidad || Number.isNaN(Number(form.capacidad))) {
+      return 'Ingresa una capacidad válida.';
+    }
+
+    if (Number(form.capacidad) < 0) {
+      return 'La capacidad no puede ser negativa.';
+    }
+
+    if (
+      form.computadoras &&
+      (!form.cantidadComputadoras ||
+        Number.isNaN(Number(form.cantidadComputadoras)) ||
+        Number(form.cantidadComputadoras) <= 0)
+    ) {
+      return 'Ingresa la cantidad de computadoras.';
+    }
+
+    return null;
+  };
+
+  const guardarAula = async () => {
+    const errorValidacion = validarFormulario();
+
+    if (errorValidacion) {
+      setFormError(errorValidacion);
+      return;
+    }
+
+    try {
+      setGuardandoFormulario(true);
+
+      const token = await obtenerTokenActual();
+      const payload = construirPayload();
+
+      if (modoFormulario === 'crear') {
+        await crearAulaAdmin(token, payload);
+
+        mostrarToast({
+          tipo: 'success',
+          mensaje: 'Aula creada correctamente.',
+        });
+      } else {
+        await actualizarAulaAdmin(token, aulaSeleccionada.id, payload);
+
+        mostrarToast({
+          tipo: 'success',
+          mensaje: 'Aula actualizada correctamente.',
+        });
+      }
+
+      setModalFormularioVisible(false);
+      limpiarFormulario();
+
+      await cargarAulas({ silencioso: true });
+    } catch (err) {
+      console.error('Error guardando aula:', err);
+
+      mostrarToast({
+        tipo: 'error',
+        mensaje: err.message || 'No se pudo guardar el aula.',
+      });
+    } finally {
+      setGuardandoFormulario(false);
+    }
+  };
+
+  const guardarEstado = async (nuevoEstado) => {
+    if (!aulaSeleccionada?.id) {
+      mostrarToast({
+        tipo: 'error',
+        mensaje: 'No se pudo identificar el aula.',
+      });
+      return;
+    }
+
+    if (aulaSeleccionada.estado_actual === nuevoEstado) {
+      mostrarToast({
+        tipo: 'info',
+        mensaje: 'El aula ya tiene ese estado.',
+      });
+      return;
+    }
+
+    try {
+      setGuardandoEstado(true);
+      setEstadoGuardando(nuevoEstado);
+
+      const token = await obtenerTokenActual();
+
+      await cambiarEstadoAulaAdmin(token, aulaSeleccionada.id, nuevoEstado);
+
+      mostrarToast({
+        tipo: 'success',
+        mensaje: 'Estado actualizado correctamente.',
+      });
+
+      await cargarAulas({ silencioso: true });
+
+      setModalEstadoVisible(false);
+      setAulaSeleccionada(null);
+      setEstadoGuardando(null);
+    } catch (err) {
+      console.error('Error cambiando estado aula:', err);
+
+      mostrarToast({
+        tipo: 'error',
+        mensaje: err.message || 'No se pudo cambiar el estado.',
+      });
+    } finally {
+      setGuardandoEstado(false);
+      setEstadoGuardando(null);
+    }
+  };
 
   const aulasDisponibles = aulas.filter(
     (item) => item.estado_actual === 'disponible'
@@ -88,6 +405,13 @@ export default function AdminAulasScreen() {
     <SafeAreaView style={styles.screen} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
 
+      <AdminToast
+        visible={toastVisible}
+        tipo={toastTipo}
+        mensaje={toastMensaje}
+        onHide={() => setToastVisible(false)}
+      />
+
       <AppHeader
         rol="admin"
         onNotifPress={() => cargarAulas({ silencioso: false })}
@@ -102,17 +426,16 @@ export default function AdminAulasScreen() {
         <View style={styles.titleRow}>
           <View style={styles.titleTextBox}>
             <Text style={styles.title}>Aulas</Text>
-            <Text style={styles.subtitle}>
-              Gestión de espacios académicos.
-            </Text>
+            <Text style={styles.subtitle}>Gestión de espacios académicos.</Text>
           </View>
 
           <TouchableOpacity
-            style={styles.refreshBtn}
-            onPress={() => cargarAulas({ silencioso: false })}
-            activeOpacity={0.8}
+            style={styles.addBtn}
+            onPress={abrirCrearAula}
+            activeOpacity={0.85}
           >
-            <Ionicons name="refresh" size={18} color={colors.primary} />
+            <Ionicons name="add" size={18} color={colors.white} />
+            <Text style={styles.addBtnText}>Nueva</Text>
           </TouchableOpacity>
         </View>
 
@@ -121,52 +444,36 @@ export default function AdminAulasScreen() {
         ) : error ? (
           <View style={styles.errorCard}>
             <Ionicons name="alert-circle-outline" size={24} color="#DC2626" />
+
             <Text style={styles.errorText}>{error}</Text>
+
+            <TouchableOpacity
+              style={styles.retryBtn}
+              onPress={() => cargarAulas({ silencioso: false })}
+            >
+              <Text style={styles.retryText}>Reintentar</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <>
-            <View style={styles.summaryGrid}>
-              <SummaryCard
-                icon="business-outline"
-                label="Total"
-                value={aulas.length}
-                color={colors.primary}
-                bg="#EFF6FF"
-              />
+            <AulaSummaryCompact
+              total={aulas.length}
+              disponibles={aulasDisponibles}
+              ocupadas={aulasOcupadas}
+              mantenimiento={aulasMantenimiento}
+            />
 
-              <SummaryCard
-                icon="checkmark-circle-outline"
-                label="Disponibles"
-                value={aulasDisponibles}
-                color="#16A34A"
-                bg="#DCFCE7"
-              />
-
-              <SummaryCard
-                icon="radio-button-on-outline"
-                label="Ocupadas"
-                value={aulasOcupadas}
-                color="#D97706"
-                bg="#FEF3C7"
-              />
-
-              <SummaryCard
-                icon="construct-outline"
-                label="Mantenimiento"
-                value={aulasMantenimiento}
-                color="#DC2626"
-                bg="#FEF2F2"
-              />
-            </View>
-
-            <View style={styles.filterRow}>
+            <View style={styles.filterWrap}>
               {FILTROS.map((item) => {
                 const active = filtroActivo === item.key;
 
                 return (
                   <TouchableOpacity
                     key={item.key}
-                    style={[styles.filterChip, active && styles.filterChipActive]}
+                    style={[
+                      styles.filterChip,
+                      active && styles.filterChipActive,
+                    ]}
                     onPress={() => setFiltroActivo(item.key)}
                     activeOpacity={0.8}
                   >
@@ -192,7 +499,12 @@ export default function AdminAulasScreen() {
 
             {aulasFiltradas.length > 0 ? (
               aulasFiltradas.map((item) => (
-                <AulaCard key={item.id || item._id || item.nombre} aula={item} />
+                <AulaCard
+                  key={item.id || item._id || item.nombre}
+                  aula={item}
+                  onEditar={() => abrirEditarAula(item)}
+                  onEstado={() => abrirCambiarEstado(item)}
+                />
               ))
             ) : (
               <View style={styles.emptyCard}>
@@ -203,6 +515,7 @@ export default function AdminAulasScreen() {
                 />
 
                 <Text style={styles.emptyTitle}>Sin aulas</Text>
+
                 <Text style={styles.emptyText}>
                   No hay espacios registrados para este filtro.
                 </Text>
@@ -211,185 +524,34 @@ export default function AdminAulasScreen() {
           </>
         )}
       </ScrollView>
+
+      <AulaFormModal
+        visible={modalFormularioVisible}
+        modo={modoFormulario}
+        form={form}
+        guardando={guardandoFormulario}
+        errorMensaje={formError}
+        onChange={actualizarCampo}
+        onClose={cerrarFormulario}
+        onSubmit={guardarAula}
+      />
+
+      <AulaStatusModal
+        visible={modalEstadoVisible}
+        aula={aulaSeleccionada}
+        guardando={guardandoEstado}
+        estadoGuardando={estadoGuardando}
+        onClose={() => {
+          if (!guardandoEstado) {
+            setModalEstadoVisible(false);
+            setAulaSeleccionada(null);
+            setEstadoGuardando(null);
+          }
+        }}
+        onSelect={guardarEstado}
+      />
     </SafeAreaView>
   );
-}
-
-function SummaryCard({ icon, label, value, color, bg }) {
-  return (
-    <View style={styles.summaryCard}>
-      <View style={[styles.summaryIcon, { backgroundColor: bg }]}>
-        <Ionicons name={icon} size={20} color={color} />
-      </View>
-
-      <Text style={styles.summaryValue}>{value}</Text>
-      <Text style={styles.summaryLabel}>{label}</Text>
-    </View>
-  );
-}
-
-function AulaCard({ aula }) {
-  const estado = aula.estado_actual || 'disponible';
-
-  const estadoConfig = {
-    disponible: {
-      label: 'Disponible',
-      color: '#16A34A',
-      bg: '#DCFCE7',
-      icon: 'checkmark-circle-outline',
-    },
-    ocupado: {
-      label: 'Ocupada',
-      color: '#D97706',
-      bg: '#FEF3C7',
-      icon: 'radio-button-on-outline',
-    },
-    mantenimiento: {
-      label: 'Mantenimiento',
-      color: '#DC2626',
-      bg: '#FEF2F2',
-      icon: 'construct-outline',
-    },
-  };
-
-  const config = estadoConfig[estado] || estadoConfig.disponible;
-
-  const equipamiento = Array.isArray(aula.equipamiento) ? aula.equipamiento : [];
-
-  return (
-    <View style={styles.aulaCard}>
-      <View style={styles.aulaHeader}>
-        <View style={styles.aulaIconBox}>
-          <Ionicons name="business-outline" size={22} color={colors.primary} />
-        </View>
-
-        <View style={styles.aulaTextBox}>
-          <Text style={styles.aulaTitle} numberOfLines={1}>
-            {aula.nombre || 'Aula sin nombre'}
-          </Text>
-
-          <Text style={styles.aulaSubtitle} numberOfLines={1}>
-            {aula.ubicacion || aula.bloque || 'Ubicación no registrada'}
-          </Text>
-        </View>
-
-        <View style={[styles.estadoBadge, { backgroundColor: config.bg }]}>
-          <Ionicons name={config.icon} size={13} color={config.color} />
-          <Text style={[styles.estadoText, { color: config.color }]}>
-            {config.label}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.detailsGrid}>
-        <DetailItem
-          icon="people-outline"
-          label="Capacidad"
-          value={aula.capacidad ? `${aula.capacidad}` : '—'}
-        />
-
-        <DetailItem
-          icon="layers-outline"
-          label="Bloque"
-          value={aula.bloque || '—'}
-        />
-
-        <DetailItem
-          icon="cube-outline"
-          label="Tipo"
-          value={normalizarTexto(aula.tipo)}
-        />
-      </View>
-
-      <View style={styles.equipmentBox}>
-        <View style={styles.equipmentHeader}>
-          <Text style={styles.equipmentTitle}>Equipamiento</Text>
-          <Text style={styles.equipmentCounter}>{equipamiento.length}</Text>
-        </View>
-
-        {equipamiento.length > 0 ? (
-          <View style={styles.equipmentGrid}>
-            {equipamiento.slice(0, 4).map((item, index) => (
-              <View key={`${item}-${index}`} style={styles.equipmentChip}>
-                <Text style={styles.equipmentText} numberOfLines={1}>
-                  {normalizarTexto(item)}
-                </Text>
-              </View>
-            ))}
-
-            {equipamiento.length > 4 && (
-              <View style={styles.equipmentChip}>
-                <Text style={styles.equipmentText}>
-                  +{equipamiento.length - 4}
-                </Text>
-              </View>
-            )}
-          </View>
-        ) : (
-          <Text style={styles.noEquipmentText}>
-            Sin equipamiento registrado.
-          </Text>
-        )}
-      </View>
-    </View>
-  );
-}
-
-function DetailItem({ icon, label, value }) {
-  return (
-    <View style={styles.detailItem}>
-      <Ionicons name={icon} size={16} color={colors.primary} />
-
-      <View style={styles.detailTextBox}>
-        <Text style={styles.detailValue} numberOfLines={1}>
-          {value}
-        </Text>
-        <Text style={styles.detailLabel}>{label}</Text>
-      </View>
-    </View>
-  );
-}
-
-function SkeletonAulas() {
-  return (
-    <View>
-      <View style={styles.summaryGrid}>
-        {[1, 2, 3, 4].map((item) => (
-          <View key={item} style={styles.skeletonSummary}>
-            <View style={styles.skeletonCircle} />
-            <View style={styles.skeletonLineLarge} />
-            <View style={styles.skeletonLineSmall} />
-          </View>
-        ))}
-      </View>
-
-      {[1, 2, 3].map((item) => (
-        <View key={item} style={styles.skeletonCard}>
-          <View style={styles.skeletonTop}>
-            <View style={styles.skeletonCircle} />
-            <View style={styles.skeletonTextBlock}>
-              <View style={styles.skeletonLineTitle} />
-              <View style={styles.skeletonLineSub} />
-            </View>
-          </View>
-
-          <View style={styles.skeletonRow}>
-            <View style={styles.skeletonPill} />
-            <View style={styles.skeletonPill} />
-            <View style={styles.skeletonPill} />
-          </View>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-function normalizarTexto(texto) {
-  if (!texto) return 'No registrado';
-
-  return String(texto)
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (letra) => letra.toUpperCase());
 }
 
 const styles = StyleSheet.create({
@@ -412,7 +574,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
 
   titleTextBox: {
@@ -432,57 +594,27 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  refreshBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#EFF6FF',
+  addBtn: {
+    minHeight: 38,
+    borderRadius: radius.full,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 5,
   },
 
-  summaryGrid: {
+  addBtnText: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: colors.white,
+  },
+
+  filterWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
     marginBottom: spacing.md,
-  },
-
-  summaryCard: {
-    width: '48.5%',
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-  },
-
-  summaryIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.sm,
-  },
-
-  summaryValue: {
-    fontSize: 24,
-    fontWeight: typography.weight.bold,
-    color: colors.textPrimary,
-  },
-
-  summaryLabel: {
-    fontSize: typography.size.xs,
-    color: colors.textSecondary,
-    fontWeight: typography.weight.semibold,
-    marginTop: 2,
-  },
-
-  filterRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
   },
 
   filterChip: {
@@ -528,146 +660,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.bold,
   },
 
-  aulaCard: {
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
-
-  aulaHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-
-  aulaIconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.sm,
-  },
-
-  aulaTextBox: {
-    flex: 1,
-    paddingRight: spacing.sm,
-  },
-
-  aulaTitle: {
-    fontSize: typography.size.md,
-    fontWeight: typography.weight.bold,
-    color: colors.textPrimary,
-  },
-
-  aulaSubtitle: {
-    fontSize: typography.size.xs,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-
-  estadoBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    borderRadius: radius.full,
-  },
-
-  estadoText: {
-    fontSize: 11,
-    fontWeight: typography.weight.bold,
-  },
-
-  detailsGrid: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-
-  detailItem: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-    borderRadius: radius.md,
-    padding: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-
-  detailTextBox: {
-    marginTop: 5,
-  },
-
-  detailValue: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.bold,
-    color: colors.textPrimary,
-  },
-
-  detailLabel: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 2,
-    fontWeight: typography.weight.semibold,
-  },
-
-  equipmentBox: {
-    paddingTop: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-
-  equipmentHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-
-  equipmentTitle: {
-    fontSize: typography.size.xs,
-    color: colors.textSecondary,
-    fontWeight: typography.weight.bold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-
-  equipmentCounter: {
-    fontSize: typography.size.xs,
-    color: colors.primary,
-    fontWeight: typography.weight.bold,
-  },
-
-  equipmentGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-  },
-
-  equipmentChip: {
-    backgroundColor: '#EFF6FF',
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-  },
-
-  equipmentText: {
-    fontSize: 11,
-    fontWeight: typography.weight.bold,
-    color: colors.primary,
-  },
-
-  noEquipmentText: {
-    fontSize: typography.size.xs,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
-  },
-
   errorCard: {
     backgroundColor: '#FEF2F2',
     borderRadius: radius.lg,
@@ -682,6 +674,22 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     color: '#DC2626',
     textAlign: 'center',
+  },
+
+  retryBtn: {
+    marginTop: spacing.md,
+    minHeight: 42,
+    borderRadius: radius.md,
+    backgroundColor: '#DC2626',
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  retryText: {
+    color: colors.white,
+    fontWeight: typography.weight.bold,
+    fontSize: typography.size.sm,
   },
 
   emptyCard: {
@@ -705,84 +713,5 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     marginTop: 4,
-  },
-
-  skeletonSummary: {
-    width: '48.5%',
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-  },
-
-  skeletonCard: {
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
-
-  skeletonTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-
-  skeletonCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#E5E7EB',
-    marginBottom: spacing.sm,
-  },
-
-  skeletonTextBlock: {
-    flex: 1,
-    marginLeft: spacing.sm,
-  },
-
-  skeletonLineLarge: {
-    width: 70,
-    height: 22,
-    borderRadius: radius.full,
-    backgroundColor: '#E5E7EB',
-    marginBottom: 8,
-  },
-
-  skeletonLineSmall: {
-    width: 110,
-    height: 12,
-    borderRadius: radius.full,
-    backgroundColor: '#E5E7EB',
-  },
-
-  skeletonLineTitle: {
-    width: '65%',
-    height: 16,
-    borderRadius: radius.full,
-    backgroundColor: '#E5E7EB',
-    marginBottom: 8,
-  },
-
-  skeletonLineSub: {
-    width: '45%',
-    height: 12,
-    borderRadius: radius.full,
-    backgroundColor: '#E5E7EB',
-  },
-
-  skeletonRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-
-  skeletonPill: {
-    flex: 1,
-    height: 48,
-    borderRadius: radius.md,
-    backgroundColor: '#E5E7EB',
   },
 });
