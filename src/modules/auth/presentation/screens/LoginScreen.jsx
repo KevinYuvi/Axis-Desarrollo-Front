@@ -1,142 +1,477 @@
-import { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
   Image,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Alert,
+  ScrollView,
   StyleSheet,
-  SafeAreaView,
-  ActivityIndicator, // Importamos para el estado de carga
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import Input from '../../../../shared/components/Input';
-import Button from '../../../../shared/components/Button';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSignIn } from '@clerk/clerk-expo';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
 
-// 🔌 Recibimos onLoginSubmit desde App.js
-export default function LoginScreen({ onDemoAccess, onLoginSubmit }) {
-  const [correo, setCorreo] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false); // Estado para controlar el spinner del login
+export default function LoginScreen() {
+  const { signIn, setActive, isLoaded } = useSignIn();
+  const router = useRouter();
 
-  const handleLogin = async () => {
-    if (correo.trim() === '' || password.trim() === '') {
-      Alert.alert('Campos incompletos', 'Por favor, ingresa tu correo y contraseña.');
-      return;
+  const passwordInputRef = useRef(null);
+
+  const [emailAddress, setEmailAddress] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [generalError, setGeneralError] = useState('');
+
+  const limpiarErrores = () => {
+    setEmailError('');
+    setPasswordError('');
+    setGeneralError('');
+  };
+
+  const validarFormulario = () => {
+    limpiarErrores();
+
+    let valido = true;
+
+    const correoLimpio = emailAddress.trim().toLowerCase();
+    const regexUCE = /^[a-zA-Z0-9._%+-]+@uce\.edu\.ec$/;
+
+    if (!regexUCE.test(correoLimpio)) {
+      setEmailError('Solo se admiten correos @uce.edu.ec');
+      valido = false;
     }
 
-    if (onLoginSubmit) {
+    if (!password.trim()) {
+      setPasswordError('La contraseña es obligatoria');
+      valido = false;
+    }
+
+    return valido;
+  };
+
+  const onSignInPress = async () => {
+    if (!isLoaded || loading) return;
+
+    const formularioValido = validarFormulario();
+
+    if (!formularioValido) return;
+
+    const correoLimpio = emailAddress.trim().toLowerCase();
+
+    try {
       setLoading(true);
-      // Ejecutamos la función asíncrona de App.js que va hacia Docker
-      await onLoginSubmit(correo, password);
+
+      const signInAttempt = await signIn.create({
+        identifier: correoLimpio,
+        password,
+      });
+
+      if (signInAttempt.status === 'complete') {
+        await setActive({
+          session: signInAttempt.createdSessionId,
+        });
+
+        router.replace('/');
+        return;
+      }
+
+      setGeneralError(
+        `No se pudo completar el inicio de sesión: ${signInAttempt.status}`
+      );
+    } catch (error) {
+      console.error('ERROR LOGIN CLERK:', error);
+
+      setGeneralError(
+        error?.errors?.[0]?.message ||
+          'Credenciales incorrectas. Inténtalo de nuevo.'
+      );
+    } finally {
       setLoading(false);
-    } else {
-      Alert.alert('Error', 'El método de autenticación no está configurado.');
     }
   };
 
-  const handleDemoAccess = () => {
-    if (onDemoAccess) {
-      onDemoAccess();
-    } else {
-      Alert.alert('Acceso demo como estudiante');
-    }
+  const recuperarPassword = () => {
+    Alert.alert(
+      'Recuperar contraseña',
+      'La recuperación de contraseña se conectará después.'
+    );
   };
 
   return (
     <SafeAreaView style={styles.screen}>
-      <StatusBar style="dark" />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView
+          style={styles.flex}
           contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
+          showsVerticalScrollIndicator={false}
         >
           <View style={styles.brandBlock}>
-            <View style={styles.iconContainer}>
+            <View style={styles.logoBox}>
               <Image
                 source={require('../../../../../assets/axis_la_central_conectada_icon.png')}
-                style={styles.icon}
+                style={styles.logo}
                 resizeMode="contain"
               />
             </View>
+
             <Text style={styles.brand}>AXIS</Text>
-            <Text style={styles.brandSubtitle}>Smart Campus UCE</Text>
-            <View style={styles.chip}>
-              <Text style={styles.chipText}>La Central conectada</Text>
-            </View>
           </View>
 
-          <View style={styles.formContainer}>
+          <View style={styles.formCard}>
             <Text style={styles.sectionTitle}>Iniciar sesión</Text>
 
-            <Text style={styles.fieldLabel}>CORREO INSTITUCIONAL</Text>
-            <Input
-              placeholder="usuario@uce.edu.ec"
-              value={correo}
-              onChangeText={setCorreo}
-              keyboardType="email-address"
-              autoCapitalize="none" // Evita que ponga la primera en mayúscula automáticamente
-              editable={!loading}   // Bloquea el input si está cargando
-            />
+            {generalError ? (
+              <View style={styles.generalErrorBox}>
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={18}
+                  color="#DC2626"
+                />
+                <Text style={styles.generalErrorText}>{generalError}</Text>
+              </View>
+            ) : null}
 
-            <Text style={styles.fieldLabel}>CONTRASEÑA</Text>
-            <Input
-              placeholder="••••••••"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              editable={!loading}   // Bloquea el input si está cargando
-            />
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Correo institucional</Text>
 
-            <Text style={styles.forgotPassword}>¿Olvidaste tu contraseña?</Text>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  emailError ? styles.inputWrapperError : null,
+                ]}
+              >
+                <Ionicons
+                  name="mail-outline"
+                  size={20}
+                  color={emailError ? '#DC2626' : colors.textSecondary}
+                />
 
-            <View style={styles.buttonContainer}>
-              {loading ? (
-                <ActivityIndicator size="large" color={colors?.primary || '#2F80ED'} style={{ marginVertical: 10 }} />
-              ) : (
-                <Button title="Iniciar sesión" onPress={handleLogin} />
-              )}
-              
-              <Text style={styles.helpText}>Usa tu correo institucional UCE</Text>
-              <View style={{ height: spacing.sm }} />
-              <Button
-                title="Ingresar como estudiante demo"
-                variant="secondary"
-                onPress={handleDemoAccess}
-                disabled={loading} // Deshabilita el demo si está cargando el login real
-              />
+                <TextInput
+                  style={styles.input}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  value={emailAddress}
+                  onChangeText={(text) => {
+                    setEmailAddress(text);
+                    setEmailError('');
+                    setGeneralError('');
+                  }}
+                  placeholder="usuario@uce.edu.ec"
+                  placeholderTextColor="#A1A1AA"
+                  editable={!loading}
+                  returnKeyType="next"
+                  blurOnSubmit={false}
+                  onSubmitEditing={() => passwordInputRef.current?.focus()}
+                />
+              </View>
+
+              {emailError ? (
+                <Text style={styles.errorText}>{emailError}</Text>
+              ) : null}
             </View>
+
+            <View style={styles.inputGroup}>
+              <View style={styles.passwordLabelRow}>
+                <Text style={styles.inputLabel}>Contraseña</Text>
+
+                <TouchableOpacity
+                  onPress={recuperarPassword}
+                  disabled={loading}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.forgotPasswordText}>
+                    ¿Olvidaste tu contraseña?
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View
+                style={[
+                  styles.inputWrapper,
+                  passwordError ? styles.inputWrapperError : null,
+                ]}
+              >
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={20}
+                  color={passwordError ? '#DC2626' : colors.textSecondary}
+                />
+
+                <TextInput
+                  ref={passwordInputRef}
+                  style={styles.input}
+                  value={password}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    setPasswordError('');
+                    setGeneralError('');
+                  }}
+                  secureTextEntry={!showPassword}
+                  placeholder="••••••••"
+                  placeholderTextColor="#A1A1AA"
+                  editable={!loading}
+                  returnKeyType="done"
+                  onSubmitEditing={onSignInPress}
+                />
+
+                <TouchableOpacity
+                  style={styles.eyeButton}
+                  onPress={() => setShowPassword(!showPassword)}
+                  activeOpacity={0.7}
+                  disabled={loading}
+                >
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={22}
+                    color="#6B7280"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {passwordError ? (
+                <Text style={styles.errorText}>{passwordError}</Text>
+              ) : null}
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.primaryButton,
+                (loading || !isLoaded) && styles.disabledButton,
+              ]}
+              onPress={onSignInPress}
+              disabled={loading || !isLoaded}
+              activeOpacity={0.85}
+            >
+              {loading || !isLoaded ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Ingresar</Text>
+              )}
+            </TouchableOpacity>
           </View>
+
+          <TouchableOpacity
+            style={styles.switchFlowContainer}
+            onPress={() => router.push('/(auth)/register')}
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.switchFlowText}>
+              ¿No tienes una cuenta?{' '}
+              <Text style={styles.switchFlowLink}>Regístrate</Text>
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-// Mantenemos tus estilos exactamente intactos tal como los tienes abajo
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#FFF' },
-  flex: { flex: 1 },
-  content: { padding: 24, justifyContent: 'center' },
-  brandBlock: { alignItems: 'center', marginBottom: 32, marginTop: 20 },
-  iconContainer: { width: 80, height: 80, marginBottom: 12 },
-  icon: { width: '100%', height: '100%' },
-  brand: { fontSize: 28, fontWeight: 'bold', color: '#1B1B1B' },
-  brandSubtitle: { fontSize: 16, color: '#828282', marginBottom: 8 },
-  chip: { backgroundColor: '#E3F2FD', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
-  chipText: { color: '#2F80ED', fontSize: 12, fontWeight: '600' },
-  formContainer: { backgroundColor: '#FFF' },
-  sectionTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 24, color: '#1B1B1B' },
-  fieldLabel: { fontSize: 11, fontWeight: '700', color: '#828282', marginBottom: 6, letterSpacing: 1 },
-  forgotPassword: { fontSize: 13, color: '#2F80ED', textAlign: 'right', marginTop: 8, fontWeight: '500' },
-  buttonContainer: { marginTop: 24, alignItems: 'center', width: '100%' },
-  helpText: { fontSize: 12, color: '#BDBDBD', marginTop: 8 },
+  screen: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+
+  flex: {
+    flex: 1,
+  },
+
+  content: {
+    flexGrow: 1,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xl,
+    justifyContent: 'center',
+  },
+
+  brandBlock: {
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+
+  logoBox: {
+    width: 70,
+    height: 70,
+    borderRadius: 20,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+
+  logo: {
+    width: 54,
+    height: 54,
+  },
+
+  brand: {
+    fontSize: 32,
+    fontWeight: typography.weight.bold,
+    color: colors.primary,
+    letterSpacing: 3,
+  },
+
+  formCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: spacing.lg,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    elevation: 2,
+  },
+
+  sectionTitle: {
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.bold,
+    color: colors.textPrimary,
+    marginBottom: spacing.lg,
+  },
+
+  generalErrorBox: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: spacing.md,
+  },
+
+  generalErrorText: {
+    flex: 1,
+    color: '#DC2626',
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+  },
+
+  inputGroup: {
+    marginBottom: spacing.md,
+  },
+
+  inputLabel: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontWeight: typography.weight.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+
+  passwordLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  forgotPasswordText: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: typography.weight.bold,
+    marginBottom: 8,
+  },
+
+  inputWrapper: {
+    minHeight: 54,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  inputWrapperError: {
+    borderColor: '#DC2626',
+    backgroundColor: '#FEF2F2',
+  },
+
+  input: {
+    flex: 1,
+    fontSize: typography.size.sm,
+    color: colors.textPrimary,
+    fontWeight: typography.weight.semibold,
+    paddingVertical: 0,
+    minHeight: 48,
+  },
+
+  eyeButton: {
+    padding: 4,
+  },
+
+  errorText: {
+    color: '#DC2626',
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    marginTop: 6,
+  },
+
+  primaryButton: {
+    minHeight: 54,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+  },
+
+  disabledButton: {
+    opacity: 0.65,
+  },
+
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+  },
+
+  switchFlowContainer: {
+    alignItems: 'center',
+    marginTop: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+
+  switchFlowText: {
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+  },
+
+  switchFlowLink: {
+    color: colors.primary,
+    fontWeight: typography.weight.bold,
+  },
 });

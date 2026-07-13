@@ -1,70 +1,106 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TextInput, TouchableOpacity, Alert, Image } from 'react-native';
+import { Feather } from '@expo/vector-icons'; // Corregido el typo aquí
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
+import { useUser } from '../../../../shared/hooks/useClerkOrMock';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
-import Button from '../../../../shared/components/Button';
-import AppHeader from '../../../../shared/components/AppHeader';
-import SearchInput from '../../../../shared/components/SearchInput';
-import BottomTabBar from '../../../../shared/components/BottomTabBar';
-import { summaryMock, recommendedSpaceMock } from '../../../../shared/mocks/spacesMock';
+import { Button, AppHeader, SearchInput } from '../../../../shared/components';
+import { useOccupancy } from '../../../../shared/hooks/useOccupancy';
 
-export default function StudentHomeScreen({ onNavigate }) {
-  const handleRecommendation = () => Alert.alert('Aquí se mostrará la recomendación inteligente de Axis');
+export default function StudentHomeScreen({ onNavigate, onNavigateToCamera }) {
+  const { user } = useUser();
+  const rol = user?.publicMetadata?.rol?.toLowerCase() || 'estudiante';
+  const { loading, summary, recommendation } = useOccupancy();
+
+  const handleRecommendation = () => {
+    if (!recommendation) {
+      Alert.alert('Axis', 'Todavía no hay una recomendación disponible.');
+      return;
+    }
+    onNavigateToCamera(recommendation.space.id);
+  };
+
   const handleAllLibraries = () => onNavigate('libraries');
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={styles.screen} edges={['top']}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.content}>
-        
-        <AppHeader />
 
-        {/* Titles */}
+      {/* ── Cabecera única (no hay header nativo de Expo Router) ── */}
+      <AppHeader rol={rol} />
+
+      <ScrollView contentContainerStyle={styles.content}>
+
+        {/* Títulos */}
         <Text style={styles.title}>Encuentra dónde estudiar</Text>
         <Text style={styles.subtitle}>Espacios disponibles en el campus UCE</Text>
 
         <SearchInput placeholder="Buscar biblioteca, sala o computadora..." />
 
-        {/* Summary Cards */}
-        <View style={styles.summaryContainer}>
-          <View style={styles.summaryCard}>
-            <Text style={[styles.summaryNumber, { color: colors.available }]}>{summaryMock.tables}</Text>
-            <Text style={styles.summaryLabel}>Mesas libres</Text>
-          </View>
-          <View style={styles.summaryCard}>
-            <Text style={[styles.summaryNumber, { color: colors.primary }]}>{summaryMock.computers}</Text>
-            <Text style={styles.summaryLabel}>Computadoras</Text>
-          </View>
-          <View style={styles.summaryCard}>
-            <Text style={[styles.summaryNumber, { color: colors.available }]}>{summaryMock.rooms}</Text>
-            <Text style={styles.summaryLabel}>Salas</Text>
-          </View>
-        </View>
+        {loading ? (
+          <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.xl }} />
+        ) : (
+          <>
+            {/* Tarjetas de resumen con fallback a 0 por seguridad */}
+            <View style={styles.summaryContainer}>
+              <View style={styles.summaryCard}>
+                <Text style={[styles.summaryNumber, { color: colors.available }]}>
+                  {summary?.tables ?? 0}
+                </Text>
+                <Text style={styles.summaryLabel}>Mesas libres</Text>
+              </View>
+              <View style={styles.summaryCard}>
+                <Text style={[styles.summaryNumber, { color: colors.primary }]}>
+                  {summary?.computers ?? 0}
+                </Text>
+                <Text style={styles.summaryLabel}>Computadoras</Text>
+              </View>
+              <View style={styles.summaryCard}>
+                <Text style={[styles.summaryNumber, { color: colors.available }]}>
+                  {summary?.rooms ?? 0}
+                </Text>
+                <Text style={styles.summaryLabel}>Salas</Text>
+              </View>
+            </View>
 
-        {/* Recommended Card */}
-        <View style={styles.recommendedCard}>
-          <View style={styles.recommendedBadge}>
-            <Feather name="star" size={14} color="#8B5CF6" style={{ marginRight: 6 }} />
-            <Text style={styles.recommendedBadgeText}>Recomendado por AXIS</Text>
-          </View>
-          <Text style={styles.recommendedTitle}>{recommendedSpaceMock.name}</Text>
-          <Text style={styles.recommendedDesc}>
-            {recommendedSpaceMock.occupancy}% ocupación · {recommendedSpaceMock.availableTables} mesas libres · A {recommendedSpaceMock.distanceTime}
-          </Text>
-          <Button title="Ver recomendación" onPress={handleRecommendation} />
-        </View>
+            {/* Tarjeta recomendada */}
+            {recommendation && (
+              <View style={styles.recommendedCard}>
+                <View style={styles.recommendedBadge}>
+                  <Feather name="star" size={14} color="#8B5CF6" style={{ marginRight: 6 }} />
+                  <Text style={styles.recommendedBadgeText}>Recomendado por AXIS</Text>
+                </View>
+                <Text style={styles.recommendedTitle}>{recommendation.space.name}</Text>
+                <Text style={styles.recommendedDesc}>
+                  {recommendation.space.occupancyPercent ?? recommendation.space.occupancy}% ocupación ·{' '}
+                  {recommendation.space.freeSeats ?? recommendation.space.availableTables} puestos libres ·{' '}
+                  A {recommendation.space.distanceMinutes
+                    ? `${recommendation.space.distanceMinutes} min`
+                    : recommendation.space.distanceTime}
+                </Text>
+                <Button title="Ver recomendación" onPress={handleRecommendation} />
+              </View>
+            )}
+          </>
+        )}
 
-        {/* Secondary Button */}
+        {/* Botón secundario */}
         <TouchableOpacity style={styles.secondaryButton} onPress={handleAllLibraries}>
           <Text style={styles.secondaryButtonText}>Ver todas las bibliotecas →</Text>
         </TouchableOpacity>
 
       </ScrollView>
-
-      <BottomTabBar activeTab="home" onTabPress={(tab) => onNavigate(tab)} />
     </SafeAreaView>
   );
 }
@@ -75,8 +111,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
   },
   content: {
-    padding: spacing.lg,
-    paddingBottom: 100,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
   },
   title: {
     fontSize: typography.size.xl,
@@ -150,6 +187,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     alignItems: 'center',
     backgroundColor: colors.white,
+    marginTop: spacing.sm,
   },
   secondaryButtonText: {
     fontSize: typography.size.sm,

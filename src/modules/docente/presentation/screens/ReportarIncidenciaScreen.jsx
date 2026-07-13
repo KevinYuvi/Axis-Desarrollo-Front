@@ -4,42 +4,147 @@ import {
   Text,
   View,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
-  Alert,
   ScrollView,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  Modal,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@clerk/clerk-expo';
+
+import { colors } from '../../../../shared/theme/colors';
+import { typography } from '../../../../shared/theme/typography';
+import { spacing, radius } from '../../../../shared/theme/spacing';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const CLERK_JWT_TEMPLATE = 'Axis';
 
-export default function ReportarIncidenciaScreen({
-  token,
-  claseActual,
-  onBack,
-}) {
-  const [recursoAfectado, setRecursoAfectado] = useState(
-    claseActual?.espacio?.nombre || ''
-  );
+const PRIORIDADES = [
+  {
+    value: 'baja',
+    label: 'Baja',
+    icon: 'chevron-down-circle-outline',
+    bg: '#F0FDF4',
+    color: '#16A34A',
+  },
+  {
+    value: 'media',
+    label: 'Media',
+    icon: 'remove-circle-outline',
+    bg: '#EFF6FF',
+    color: colors.primary,
+  },
+  {
+    value: 'alta',
+    label: 'Alta',
+    icon: 'alert-circle-outline',
+    bg: '#FEE2E2',
+    color: colors.danger,
+  },
+];
+
+export default function ReportarIncidenciaScreen({ token, claseActual, onBack }) {
+  const { getToken } = useAuth();
+
   const [prioridad, setPrioridad] = useState('media');
   const [descripcion, setDescripcion] = useState('');
   const [enviando, setEnviando] = useState(false);
 
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTipo, setModalTipo] = useState('info');
+  const [modalTitulo, setModalTitulo] = useState('');
+  const [modalMensaje, setModalMensaje] = useState('');
+  const [modalAccion, setModalAccion] = useState(null);
+
+  const aulaNombre = claseActual?.espacio?.nombre || 'Aula no identificada';
+  const aulaBloque = claseActual?.espacio?.bloque || 'Sin bloque';
+  const materia = claseActual?.reserva?.materia || 'Clase actual';
+
+  const obtenerTokenActual = async () => {
+    const tokenActual = await getToken({
+      template: CLERK_JWT_TEMPLATE,
+      skipCache: true,
+    });
+
+    if (tokenActual) {
+      return tokenActual;
+    }
+
+    if (token) {
+      return token;
+    }
+
+    throw new Error('No se pudo obtener una sesión activa. Vuelve a iniciar sesión.');
+  };
+
+  const leerRespuestaSegura = async (response, valorInicial = {}) => {
+    const rawText = await response.text();
+
+    if (!rawText) {
+      return valorInicial;
+    }
+
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      return valorInicial;
+    }
+  };
+
+  const mostrarModal = ({ tipo = 'info', titulo, mensaje, accion = null }) => {
+    setModalTipo(tipo);
+    setModalTitulo(titulo);
+    setModalMensaje(mensaje);
+    setModalAccion(() => accion);
+    setModalVisible(true);
+  };
+
+  const cerrarModal = () => {
+    setModalVisible(false);
+
+    if (modalAccion) {
+      modalAccion();
+    }
+
+    setModalAccion(null);
+  };
+
   const enviarReporte = async () => {
+    if (!API_URL) {
+      mostrarModal({
+        tipo: 'error',
+        titulo: 'Error',
+        mensaje: 'Falta EXPO_PUBLIC_API_URL en el archivo .env.',
+      });
+      return;
+    }
+
     if (!claseActual?.espacio?.id) {
-      Alert.alert('Sin aula', 'No se pudo identificar el aula afectada.');
+      mostrarModal({
+        tipo: 'warning',
+        titulo: 'Sin aula',
+        mensaje: 'No se pudo identificar el aula afectada.',
+      });
       return;
     }
 
     if (!descripcion.trim()) {
-      Alert.alert('Campo requerido', 'Describe el problema encontrado.');
+      mostrarModal({
+        tipo: 'warning',
+        titulo: 'Campo requerido',
+        mensaje: 'Describe brevemente el problema encontrado.',
+      });
       return;
     }
 
     try {
       setEnviando(true);
+
+      const tokenActual = await obtenerTokenActual();
 
       const payload = {
         espacio_id: claseActual.espacio.id,
@@ -50,385 +155,556 @@ export default function ReportarIncidenciaScreen({
       const response = await fetch(`${API_URL}/api/v1/reportes/`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${tokenActual}`,
           Accept: 'application/json',
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
+      const data = await leerRespuestaSegura(response, {});
 
       if (!response.ok) {
         throw new Error(data?.detail || 'No se pudo generar el reporte.');
       }
 
-      Alert.alert('Reporte generado', 'La incidencia fue registrada correctamente.');
-
-      setRecursoAfectado('');
-      setPrioridad('media');
-      setDescripcion('');
-
-      onBack();
+      mostrarModal({
+        tipo: 'success',
+        titulo: 'Reporte generado',
+        mensaje: 'Tu reporte fue registrado correctamente.',
+        accion: () => {
+          setPrioridad('media');
+          setDescripcion('');
+          onBack();
+        },
+      });
     } catch (error) {
       console.error('Error generando reporte:', error);
-      Alert.alert('Error', error.message || 'No se pudo generar el reporte.');
+
+      mostrarModal({
+        tipo: 'error',
+        titulo: 'No se pudo generar',
+        mensaje: error.message || 'No se pudo generar el reporte.',
+      });
     } finally {
       setEnviando(false);
     }
   };
 
+  const prioridadSeleccionada =
+    PRIORIDADES.find((item) => item.value === prioridad) || PRIORIDADES[1];
+
   return (
-    <SafeAreaView style={styles.page}>
-      <View style={styles.appShell}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView style={styles.screen} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
 
-        <View style={styles.navbar}>
-          <View style={styles.brandRow}>
-            <TouchableOpacity style={styles.backBtn} onPress={onBack}>
-              <Ionicons name="arrow-back" size={22} color="#2F80ED" />
-            </TouchableOpacity>
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={onBack}
+          accessibilityLabel="Volver"
+        >
+          <Ionicons name="arrow-back" size={22} color={colors.primary} />
+        </TouchableOpacity>
 
-            <View style={styles.logoContainer}>
-              <Ionicons name="school" size={18} color="#FFFFFF" />
-            </View>
-
-            <Text style={styles.brandText}>Axis</Text>
-          </View>
-
-          <View style={styles.rightActions}>
-            <View style={styles.roleBadge}>
-              <Text style={styles.roleText}>Profesor</Text>
-            </View>
-
-            <TouchableOpacity style={styles.avatarBtn}>
-              <Ionicons name="person-circle" size={28} color="#2F80ED" />
-            </TouchableOpacity>
-          </View>
+        <View style={styles.headerTextBox}>
+          <Text style={styles.headerTitle}>Reportar incidencia</Text>
+          <Text style={styles.headerSubtitle}>Clase en curso</Text>
         </View>
 
+        <View style={styles.headerIconBox}>
+          <Ionicons
+            name="alert-circle-outline"
+            size={19}
+            color={colors.primary}
+          />
+        </View>
+      </View>
+
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
         <ScrollView
-          style={styles.scrollContent}
+          style={styles.scroll}
           contentContainerStyle={styles.scrollInner}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.mainTitle}>Reportar Incidencia</Text>
+          <View style={styles.contextCard}>
+            <View style={styles.contextIcon}>
+              <Ionicons
+                name="business-outline"
+                size={22}
+                color={colors.primary}
+              />
+            </View>
 
-          <View style={styles.reportCard}>
-            <Text style={styles.reportCardTitle}>Nuevo reporte</Text>
+            <View style={styles.contextTextBox}>
+              <Text style={styles.contextTitle} numberOfLines={1}>
+                {aulaNombre}
+              </Text>
 
-            <Text style={styles.inputLabel}>Recurso afectado</Text>
+              <Text style={styles.contextSubtitle} numberOfLines={1}>
+                {aulaBloque} · {materia}
+              </Text>
+            </View>
+          </View>
 
-            <TextInput
-              style={styles.input}
-              placeholder="Seleccionar recurso..."
-              placeholderTextColor="#9CA3AF"
-              value={recursoAfectado}
-              onChangeText={setRecursoAfectado}
-              editable={false}
-            />
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View style={styles.cardHeaderText}>
+                <Text style={styles.cardTitle}>Detalles del problema</Text>
+                <Text style={styles.cardSubtitle}>
+                  Selecciona la gravedad y describe lo ocurrido.
+                </Text>
+              </View>
 
-            <Text style={styles.inputLabel}>Prioridad</Text>
+              <View
+                style={[
+                  styles.priorityMiniBadge,
+                  {
+                    backgroundColor: prioridadSeleccionada.bg,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={prioridadSeleccionada.icon}
+                  size={14}
+                  color={prioridadSeleccionada.color}
+                />
+
+                <Text
+                  style={[
+                    styles.priorityMiniText,
+                    {
+                      color: prioridadSeleccionada.color,
+                    },
+                  ]}
+                >
+                  {prioridadSeleccionada.label}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.inputLabel}>Gravedad</Text>
 
             <View style={styles.priorityRow}>
-              {['baja', 'media', 'alta'].map((item) => {
-                const active = prioridad === item;
+              {PRIORIDADES.map((item) => {
+                const active = prioridad === item.value;
 
                 return (
                   <TouchableOpacity
-                    key={item}
+                    key={item.value}
                     style={[
                       styles.priorityBtn,
-                      active && styles.priorityBtnActive,
-                      item === 'alta' && active && styles.priorityBtnHigh,
+                      active && {
+                        backgroundColor: item.bg,
+                        borderColor: item.color,
+                      },
                     ]}
-                    onPress={() => setPrioridad(item)}
+                    onPress={() => setPrioridad(item.value)}
+                    disabled={enviando}
+                    activeOpacity={0.8}
                   >
+                    <Ionicons
+                      name={item.icon}
+                      size={18}
+                      color={active ? item.color : colors.textSecondary}
+                    />
+
                     <Text
                       style={[
                         styles.priorityText,
-                        active && styles.priorityTextActive,
-                        item === 'alta' && active && styles.priorityTextHigh,
+                        active && {
+                          color: item.color,
+                        },
                       ]}
                     >
-                      {item.charAt(0).toUpperCase() + item.slice(1)}
+                      {item.label}
                     </Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
 
-            <Text style={styles.inputLabel}>Descripción del daño</Text>
+            <Text style={styles.inputLabel}>Descripción</Text>
 
             <TextInput
               style={styles.textArea}
-              placeholder="Describe el problema..."
-              placeholderTextColor="#9CA3AF"
+              placeholder="Ejemplo: el proyector no enciende, falta un cable, el equipo no responde..."
+              placeholderTextColor={colors.textMuted}
               value={descripcion}
               onChangeText={setDescripcion}
               multiline
               textAlignVertical="top"
+              editable={!enviando}
             />
 
             <TouchableOpacity
               style={[styles.submitBtn, enviando && styles.disabledBtn]}
               onPress={enviarReporte}
               disabled={enviando}
+              accessibilityRole="button"
+              activeOpacity={0.85}
             >
               {enviando ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <ActivityIndicator color={colors.white} />
               ) : (
-                <Text style={styles.submitBtnText}>Generar ticket</Text>
+                <Text style={styles.submitBtnText}>Enviar reporte</Text>
               )}
             </TouchableOpacity>
           </View>
         </ScrollView>
+      </KeyboardAvoidingView>
 
-        <View style={styles.bottomTab}>
-          <TouchableOpacity style={styles.tabItem} onPress={onBack}>
-            <Ionicons name="business-outline" size={22} color="#828282" />
-            <Text style={styles.tabLabel}>Mi Aula</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabItem}>
-            <Ionicons name="warning-outline" size={22} color="#2F80ED" />
-            <Text style={[styles.tabLabel, styles.tabLabelActive]}>Reportar</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabItem}>
-            <Ionicons name="chatbox-ellipses-outline" size={22} color="#828282" />
-            <Text style={styles.tabLabel}>Asistente IA</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <FeedbackModal
+        visible={modalVisible}
+        tipo={modalTipo}
+        titulo={modalTitulo}
+        mensaje={modalMensaje}
+        onClose={cerrarModal}
+      />
     </SafeAreaView>
   );
 }
 
+function FeedbackModal({ visible, tipo, titulo, mensaje, onClose }) {
+  const config = {
+    success: {
+      icon: 'checkmark-circle-outline',
+      color: '#16A34A',
+      bg: '#DCFCE7',
+      button: colors.primary,
+      label: 'Aceptar',
+    },
+    error: {
+      icon: 'alert-circle-outline',
+      color: '#DC2626',
+      bg: '#FEF2F2',
+      button: '#DC2626',
+      label: 'Entendido',
+    },
+    warning: {
+      icon: 'warning-outline',
+      color: '#D97706',
+      bg: '#FEF3C7',
+      button: '#D97706',
+      label: 'Entendido',
+    },
+    info: {
+      icon: 'information-circle-outline',
+      color: colors.primary,
+      bg: '#EFF6FF',
+      button: colors.primary,
+      label: 'Aceptar',
+    },
+  };
+
+  const item = config[tipo] || config.info;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalCard}>
+          <View style={[styles.modalIconBox, { backgroundColor: item.bg }]}>
+            <Ionicons name={item.icon} size={32} color={item.color} />
+          </View>
+
+          <Text style={styles.modalTitle}>{titulo}</Text>
+
+          <Text style={styles.modalMessage}>{mensaje}</Text>
+
+          <TouchableOpacity
+            style={[styles.modalBtn, { backgroundColor: item.button }]}
+            onPress={onClose}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.modalBtnText}>{item.label}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
-  page: {
+  screen: {
     flex: 1,
-    backgroundColor: '#111111',
+    backgroundColor: colors.white,
+  },
+
+  flex: {
+    flex: 1,
+  },
+
+  header: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-
-  appShell: {
-    flex: 1,
-    width: '100%',
-    maxWidth: 430,
-    backgroundColor: '#F9FAFC',
-  },
-
-  navbar: {
-    height: 62,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.white,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexShrink: 1,
-  },
-
-  rightActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderBottomColor: colors.border,
   },
 
   backBtn: {
-    marginRight: 10,
-  },
-
-  logoContainer: {
-    backgroundColor: '#2F80ED',
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    justifyContent: 'center',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F8FAFC',
     alignItems: 'center',
-    marginRight: 8,
+    justifyContent: 'center',
+    marginRight: spacing.sm,
   },
 
-  brandText: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#111827',
-  },
-
-  roleBadge: {
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 14,
-  },
-
-  roleText: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontWeight: '600',
-  },
-
-  avatarBtn: {
-    padding: 4,
-    marginLeft: 8,
-  },
-
-  scrollContent: {
+  headerTextBox: {
     flex: 1,
   },
 
+  headerTitle: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.bold,
+    color: colors.textPrimary,
+  },
+
+  headerSubtitle: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+
+  headerIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  scroll: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+
   scrollInner: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 30,
+    padding: spacing.lg,
+    paddingBottom: spacing.xxl,
   },
 
-  mainTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#111827',
-    marginBottom: 18,
-  },
-
-  reportCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+  contextCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 16,
+    borderColor: colors.border,
+    padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
   },
 
-  reportCardTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#111827',
-    marginBottom: 18,
+  contextIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+
+  contextTextBox: {
+    flex: 1,
+  },
+
+  contextTitle: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.bold,
+    color: colors.textPrimary,
+  },
+
+  contextSubtitle: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    marginTop: 3,
+  },
+
+  card: {
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+  },
+
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+
+  cardHeaderText: {
+    flex: 1,
+  },
+
+  cardTitle: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.bold,
+    color: colors.textPrimary,
+  },
+
+  cardSubtitle: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    marginTop: 4,
+    lineHeight: 17,
+  },
+
+  priorityMiniBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+  },
+
+  priorityMiniText: {
+    fontSize: 11,
+    fontWeight: typography.weight.bold,
   },
 
   inputLabel: {
     fontSize: 11,
-    color: '#6B7280',
-    fontWeight: '800',
+    color: colors.textSecondary,
+    fontWeight: typography.weight.bold,
     textTransform: 'uppercase',
-    letterSpacing: 1.4,
-    marginBottom: 8,
-    marginTop: 8,
-  },
-
-  input: {
-    minHeight: 52,
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    fontSize: 14,
-    color: '#111827',
-    marginBottom: 12,
-  },
-
-  textArea: {
-    minHeight: 110,
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    fontSize: 14,
-    color: '#111827',
-    marginBottom: 12,
+    letterSpacing: 1,
+    marginBottom: spacing.xs,
   },
 
   priorityRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
   },
 
   priorityBtn: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    minHeight: 54,
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    paddingVertical: 12,
+    borderColor: colors.border,
+    borderRadius: radius.md,
     alignItems: 'center',
-  },
-
-  priorityBtnActive: {
-    backgroundColor: '#EAF2FF',
-    borderColor: '#2F80ED',
-  },
-
-  priorityBtnHigh: {
-    backgroundColor: '#FEE2E2',
-    borderColor: '#EF4444',
+    justifyContent: 'center',
+    gap: 4,
   },
 
   priorityText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#6B7280',
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.bold,
+    color: colors.textSecondary,
   },
 
-  priorityTextActive: {
-    color: '#2F80ED',
-  },
-
-  priorityTextHigh: {
-    color: '#DC2626',
+  textArea: {
+    minHeight: 135,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    fontSize: typography.size.sm,
+    color: colors.textPrimary,
+    lineHeight: 20,
+    marginBottom: spacing.md,
   },
 
   submitBtn: {
-    backgroundColor: '#2F80ED',
-    borderRadius: 12,
-    paddingVertical: 16,
+    minHeight: 54,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
     alignItems: 'center',
-    marginTop: 4,
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
 
   submitBtnText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800',
+    color: colors.white,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
   },
 
   disabledBtn: {
     opacity: 0.6,
   },
 
-  bottomTab: {
-    height: 62,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingBottom: 4,
-  },
-
-  tabItem: {
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 80,
+    padding: spacing.lg,
   },
 
-  tabLabel: {
-    fontSize: 11,
-    color: '#828282',
-    marginTop: 4,
+  modalCard: {
+    width: '100%',
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
 
-  tabLabelActive: {
-    color: '#2F80ED',
-    fontWeight: '700',
+  modalIconBox: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+
+  modalTitle: {
+    fontSize: typography.size.lg,
+    fontWeight: typography.weight.bold,
+    color: colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+
+  modalMessage: {
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: spacing.lg,
+  },
+
+  modalBtn: {
+    width: '100%',
+    minHeight: 48,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  modalBtnText: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    color: colors.white,
   },
 });

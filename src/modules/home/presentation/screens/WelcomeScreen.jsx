@@ -1,11 +1,7 @@
 import { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import Header from '../../../../shared/components/Header';
-import Card from '../../../../shared/components/Card';
-import Badge from '../../../../shared/components/Badge';
-import Button from '../../../../shared/components/Button';
-import Input from '../../../../shared/components/Input';
+import { Header, Card, Badge, Button, Input } from '../../../../shared/components';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing } from '../../../../shared/theme/spacing';
