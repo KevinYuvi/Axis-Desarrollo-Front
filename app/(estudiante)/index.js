@@ -1,9 +1,5 @@
-import { View, Text } from 'react-native';
+import EstudianteHomeScreen from '../../src/modules/estudiante/presentation/screens/EstudianteHomeScreen';
 
-export default function EstudianteHome() {
-  return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Text>Inicio estudiante</Text>
-    </View>
-  );
+export default function EstudianteHomeRoute() {
+  return <EstudianteHomeScreen />;
 }
