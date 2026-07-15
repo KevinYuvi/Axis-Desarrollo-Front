@@ -11,12 +11,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@clerk/clerk-expo';
 
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const CLERK_JWT_TEMPLATE = 'Axis';
 
 export default function DetalleAulaScreen({
   token,
@@ -24,6 +26,8 @@ export default function DetalleAulaScreen({
   onBack,
   onReportar,
 }) {
+  const { getToken } = useAuth();
+
   const [liberando, setLiberando] = useState(false);
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -32,6 +36,7 @@ export default function DetalleAulaScreen({
   const [modalMensaje, setModalMensaje] = useState('');
   const [modalAccion, setModalAccion] = useState(null);
   const [modalConfirmacion, setModalConfirmacion] = useState(false);
+  const [modalAutoClose, setModalAutoClose] = useState(false);
 
   const espacio = claseActual?.espacio || {};
   const reserva = claseActual?.reserva || {};
@@ -39,6 +44,30 @@ export default function DetalleAulaScreen({
   const equipamiento = Array.isArray(espacio?.equipamiento)
     ? espacio.equipamiento
     : [];
+
+  const obtenerTokenActual = async () => {
+    const tokenActual = await getToken({
+      template: CLERK_JWT_TEMPLATE,
+      skipCache: true,
+    });
+
+    if (tokenActual) return tokenActual;
+    if (token) return token;
+
+    throw new Error('No se pudo obtener una sesión activa. Vuelve a iniciar sesión.');
+  };
+
+  const leerRespuestaSegura = async (response) => {
+    const rawText = await response.text();
+
+    if (!rawText) return {};
+
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      return {};
+    }
+  };
 
   const convertirFecha = (fechaTexto) => {
     if (!fechaTexto) return null;
@@ -48,42 +77,43 @@ export default function DetalleAulaScreen({
     return Number.isNaN(fecha.getTime()) ? null : fecha;
   };
 
-const obtenerEstadoClase = () => {
-  const inicio = convertirFecha(reserva?.hora_inicio);
-  const fin = convertirFecha(reserva?.hora_fin);
+  const obtenerEstadoClase = () => {
+    const inicio = convertirFecha(reserva?.hora_inicio);
+    const fin = convertirFecha(reserva?.hora_fin);
 
-  if (
-    reserva?.liberada_anticipadamente === true ||
-    reserva?.estado === 'liberada' ||
-    reserva?.estado === 'cancelada'
-  ) {
-    return 'liberada';
-  }
+    if (
+      reserva?.liberada_anticipadamente === true ||
+      reserva?.estado === 'liberada' ||
+      reserva?.estado === 'cancelada'
+    ) {
+      return 'liberada';
+    }
 
-  if (!inicio || !fin) {
-    return 'sin_horario';
-  }
+    if (!inicio || !fin) {
+      return 'sin_horario';
+    }
 
-  const ahora = new Date();
+    const ahora = new Date();
 
-  if (fin <= ahora) {
+    if (fin <= ahora) {
+      return 'finalizada';
+    }
+
+    if (fin <= inicio) {
+      return 'liberada';
+    }
+
+    if (ahora >= inicio && ahora <= fin) {
+      return 'en_curso';
+    }
+
+    if (ahora < inicio) {
+      return 'futura';
+    }
+
     return 'finalizada';
-  }
+  };
 
-  if (fin <= inicio) {
-    return 'liberada';
-  }
-
-  if (ahora >= inicio && ahora <= fin) {
-    return 'en_curso';
-  }
-
-  if (ahora < inicio) {
-    return 'futura';
-  }
-
-  return 'finalizada';
-};
   const formatHorario = (isoInicio, isoFin) => {
     if (!isoInicio || !isoFin) return 'N/A';
 
@@ -118,16 +148,48 @@ const obtenerEstadoClase = () => {
     mensaje,
     accion = null,
     confirmacion = false,
+    autoClose = false,
   }) => {
     setModalTipo(tipo);
     setModalTitulo(titulo);
     setModalMensaje(mensaje);
     setModalAccion(() => accion);
     setModalConfirmacion(confirmacion);
+    setModalAutoClose(autoClose);
     setModalVisible(true);
   };
 
+  const mostrarToastTemporal = ({
+    tipo = 'success',
+    titulo,
+    mensaje,
+    accion = null,
+    tiempo = 1200,
+  }) => {
+    mostrarModal({
+      tipo,
+      titulo,
+      mensaje,
+      accion,
+      confirmacion: false,
+      autoClose: true,
+    });
+
+    setTimeout(() => {
+      setModalVisible(false);
+      setModalAccion(null);
+      setModalConfirmacion(false);
+      setModalAutoClose(false);
+
+      if (accion) {
+        accion();
+      }
+    }, tiempo);
+  };
+
   const cerrarModal = () => {
+    if (modalAutoClose) return;
+
     setModalVisible(false);
 
     if (!modalConfirmacion && modalAccion) {
@@ -136,6 +198,7 @@ const obtenerEstadoClase = () => {
 
     setModalAccion(null);
     setModalConfirmacion(false);
+    setModalAutoClose(false);
   };
 
   const confirmarModal = () => {
@@ -147,6 +210,7 @@ const obtenerEstadoClase = () => {
 
     setModalAccion(null);
     setModalConfirmacion(false);
+    setModalAutoClose(false);
   };
 
   const liberarAula = () => {
@@ -166,6 +230,15 @@ const obtenerEstadoClase = () => {
         tipo: 'warning',
         titulo: 'No disponible',
         mensaje: 'No puedes liberar una clase que ya finalizó.',
+      });
+      return;
+    }
+
+    if (estadoClase === 'liberada') {
+      mostrarModal({
+        tipo: 'warning',
+        titulo: 'Ya liberada',
+        mensaje: 'Esta aula o reserva ya fue liberada.',
       });
       return;
     }
@@ -199,10 +272,7 @@ const obtenerEstadoClase = () => {
         throw new Error('Falta EXPO_PUBLIC_API_URL en el archivo .env.');
       }
 
-      if (!token) {
-        throw new Error('No se encontró el token de sesión.');
-      }
-
+      const tokenActual = await obtenerTokenActual();
       const estadoClase = obtenerEstadoClase();
 
       const endpoint =
@@ -210,35 +280,34 @@ const obtenerEstadoClase = () => {
           ? `${API_URL}/api/v1/reservas/liberar-actual`
           : `${API_URL}/api/v1/reservas/${reserva.id}/liberar`;
 
-const response = await fetch(endpoint, {
-  method: 'PATCH',
-  headers: {
-    Authorization: `Bearer ${token}`,
-    Accept: 'application/json',
-  },
-});
+      const response = await fetch(endpoint, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${tokenActual}`,
+          Accept: 'application/json',
+        },
+      });
 
-const rawText = await response.text();
+      const data = await leerRespuestaSegura(response);
 
-let data = {};
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
+        }
 
-if (rawText) {
-  try {
-    data = JSON.parse(rawText);
-  } catch {
-    data = {};
-  }
-}
+        if (response.status === 403) {
+          throw new Error('No tienes permisos para liberar esta aula.');
+        }
 
-if (!response.ok) {
-  throw new Error(data?.detail || 'No se pudo liberar el aula.');
-}
+        throw new Error(data?.detail || data?.message || 'No se pudo liberar el aula.');
+      }
 
-      mostrarModal({
+      mostrarToastTemporal({
         tipo: 'success',
         titulo: 'Aula liberada',
         mensaje: data?.message || 'El aula fue liberada correctamente.',
         accion: onBack,
+        tiempo: 1200,
       });
     } catch (error) {
       console.error('Error liberando aula:', error);
@@ -279,12 +348,13 @@ if (!response.ok) {
       bg: '#FEF3C7',
       color: '#D97706',
       icon: 'warning-outline',
-    },liberada: {
-  label: 'Liberada',
-  bg: '#FEF2F2',
-  color: '#DC2626',
-  icon: 'exit-outline',
-},
+    },
+    liberada: {
+      label: 'Liberada',
+      bg: '#FEF2F2',
+      color: '#DC2626',
+      icon: 'exit-outline',
+    },
   };
 
   const estadoActual = estadoConfig[estadoClase] || estadoConfig.sin_horario;
@@ -507,6 +577,7 @@ if (!response.ok) {
         titulo={modalTitulo}
         mensaje={modalMensaje}
         confirmacion={modalConfirmacion}
+        autoClose={modalAutoClose}
         onClose={cerrarModal}
         onConfirm={confirmarModal}
       />
@@ -555,6 +626,7 @@ function FeedbackModal({
   titulo,
   mensaje,
   confirmacion,
+  autoClose,
   onClose,
   onConfirm,
 }) {
@@ -606,7 +678,7 @@ function FeedbackModal({
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>
-        <View style={styles.modalCard}>
+        <View style={[styles.modalCard, autoClose && styles.toastCard]}>
           <View style={[styles.modalIconBox, { backgroundColor: item.bg }]}>
             <Ionicons name={item.icon} size={32} color={item.color} />
           </View>
@@ -615,32 +687,36 @@ function FeedbackModal({
 
           <Text style={styles.modalMessage}>{mensaje}</Text>
 
-          {confirmacion ? (
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={onClose}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.modalCancelText}>Cancelar</Text>
-              </TouchableOpacity>
+          {!autoClose && (
+            <>
+              {confirmacion ? (
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={styles.modalCancelBtn}
+                    onPress={onClose}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.modalCancelText}>Cancelar</Text>
+                  </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.modalConfirmBtn, { backgroundColor: item.button }]}
-                onPress={onConfirm}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.modalConfirmText}>{item.label}</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={[styles.modalSingleBtn, { backgroundColor: item.button }]}
-              onPress={onClose}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.modalSingleText}>{item.label}</Text>
-            </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalConfirmBtn, { backgroundColor: item.button }]}
+                    onPress={onConfirm}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.modalConfirmText}>{item.label}</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.modalSingleBtn, { backgroundColor: item.button }]}
+                  onPress={onClose}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.modalSingleText}>{item.label}</Text>
+                </TouchableOpacity>
+              )}
+            </>
           )}
         </View>
       </View>
@@ -1026,6 +1102,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
+  },
+
+  toastCard: {
+    maxWidth: 320,
+    paddingVertical: spacing.lg,
   },
 
   modalIconBox: {
