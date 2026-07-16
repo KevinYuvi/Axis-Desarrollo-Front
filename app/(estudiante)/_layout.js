@@ -7,6 +7,7 @@ import { typography } from '../../src/shared/theme/typography';
 export default function EstudianteLayout() {
   return (
     <Tabs
+      initialRouteName="index"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
@@ -56,28 +57,26 @@ export default function EstudianteLayout() {
       />
 
       <Tabs.Screen
-        name="asistente"
+        name="reportes"
         options={{
-          title: 'Asistente',
+          title: 'Reportes',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="sparkles-outline" size={size} color={color} />
+            <Ionicons name="document-text-outline" size={size} color={color} />
           ),
         }}
       />
 
       <Tabs.Screen
-        name="perfil"
+        name="reporte/[reporteId]"
         options={{
           href: null,
         }}
       />
 
-      <Tabs.Screen
-        name="ruta-clase/[claseId]"
-        options={{
-          href: null,
-        }}
-      />
+      <Tabs.Screen name="perfil" options={{ href: null }} />
+      <Tabs.Screen name="reportar-actual" options={{ href: null }} />
+      <Tabs.Screen name="clase/[claseId]" options={{ href: null }} />
+      <Tabs.Screen name="ruta-clase/[claseId]" options={{ href: null }} />
     </Tabs>
   );
 }

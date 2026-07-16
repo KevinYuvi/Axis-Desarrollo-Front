@@ -65,6 +65,13 @@ export default function AdminLayout() {
         }}
       />
 
+      <Tabs.Screen
+        name="reporte/[reporteId]"
+        options={{
+          href: null,
+        }}
+      />
+
       <Tabs.Screen name="perfil" options={{ href: null }} />
     </Tabs>
   );
