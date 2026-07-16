@@ -94,7 +94,7 @@ En la pantalla de login, tocar **Regístrate** y usar un correo institucional re
 ## Probar la cámara en vivo
 
 1. En el celular-cámara, abrir IP Webcam y tocar **Iniciar servidor**. Confirmar que la IP coincide con la del `.env` (si cambió, actualizar `.env` y reiniciar con `-c`).
-2. En la app, ir a **Bibliotecas → Biblioteca FICA → Ver detalle** (es el único espacio con cámara real conectada).
+2. En la app, con una cuenta de rol **admin**, ir a **Bibliotecas → Biblioteca Cisco → Cámara en vivo** (es el único espacio con cámara real conectada; la cámara solo está disponible para el rol admin — los demás roles ven las estadísticas y la ubicación).
 3. Debe verse el video en vivo y, debajo, la sección **"Último análisis con IA (cada 10 s)"** con la foto anotada por YOLO (recuadros sobre las personas detectadas).
 4. Pararse frente a la cámara y esperar 10–20 segundos: el conteo de personas, el porcentaje de ocupación y la recomendación se actualizan solos.
 5. Resiliencia: apagar el vision-service o la cámara no rompe la app — cae a datos simulados y se recupera sola al volver a encenderlos.

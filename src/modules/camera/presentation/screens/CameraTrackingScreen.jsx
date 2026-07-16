@@ -54,8 +54,10 @@ function getAnnotatedFrameUrl(spaceId, updatedAt) {
  * @param {Object} props
  * @param {string} props.spaceId - Id del espacio a mostrar
  * @param {Function} props.onNavigate - Callback para cambiar de pantalla
+ * @param {string} props.rol - Rol activo (define el chip del AppHeader; la
+ *   vista de cámara en vivo solo se enlaza desde la sección de admin)
  */
-export default function CameraTrackingScreen({ spaceId, onNavigate }) {
+export default function CameraTrackingScreen({ spaceId, onNavigate, rol = 'estudiante' }) {
   const { spaces } = useOccupancy();
   const space = spaces.find((item) => item.id === spaceId);
   const isLive = hasLiveCamera(spaceId);
@@ -70,7 +72,7 @@ export default function CameraTrackingScreen({ spaceId, onNavigate }) {
     <SafeAreaView style={styles.screen}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.content}>
-        <AppHeader />
+        <AppHeader rol={rol} />
 
         <TouchableOpacity style={styles.backButton} onPress={() => onNavigate('libraries')}>
           <Feather name="arrow-left" size={16} color={colors.textSecondary} style={{ marginRight: 6 }} />

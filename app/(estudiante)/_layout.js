@@ -77,6 +77,9 @@ export default function EstudianteLayout() {
       <Tabs.Screen name="reportar-actual" options={{ href: null }} />
       <Tabs.Screen name="clase/[claseId]" options={{ href: null }} />
       <Tabs.Screen name="ruta-clase/[claseId]" options={{ href: null }} />
+      {/* Ubicación de la biblioteca (botón "Ver ubicación" de Bibliotecas);
+          pantalla interna, sin pestaña propia. */}
+      <Tabs.Screen name="biblioteca-ubicacion/[spaceId]" options={{ href: null }} />
     </Tabs>
   );
 }

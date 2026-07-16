@@ -11,15 +11,16 @@
 // 3. Define EXPO_PUBLIC_CAMERA_STREAM_URL en tu .env con esa IP
 //    (mismo puerto, 8080 por defecto).
 const CAMERA_STREAM_URL =
-  process.env.EXPO_PUBLIC_CAMERA_STREAM_URL ?? 'http://192.168.1.23:8080/video';
+  process.env.EXPO_PUBLIC_CAMERA_STREAM_URL ?? 'http://192.168.18.2:8080/video';
 
-// Id del único espacio que hoy tiene una cámara real conectada (ver plan de
-// implementación en docs/.plans/260708-1317-camera-tracking-realtime/). Los
-// demás espacios muestran un mensaje de "sin cámara".
-const LIVE_CAMERA_SPACE_ID = 'biblioteca-fica';
+// Id del único espacio que hoy tiene una cámara real conectada: la
+// Biblioteca Cisco de la Universidad Central. Debe coincidir con el spaceId
+// registrado en el backend (STATIC_SPACE_METADATA y space_registry del
+// vision-service). Los demás espacios muestran un mensaje de "sin cámara".
+const LIVE_CAMERA_SPACE_ID = 'biblioteca-cisco';
 
 /**
- * Indica si el espacio dado tiene una cámara real conectada en esta fase.
+ * Indica si el espacio dado tiene una cámara real conectada.
  * @param {string} spaceId - Identificador del espacio a verificar
  * @returns {boolean} true si el espacio tiene cámara en vivo disponible
  */

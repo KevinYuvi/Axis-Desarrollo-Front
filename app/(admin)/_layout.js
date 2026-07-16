@@ -45,6 +45,18 @@ export default function AdminLayout() {
         }}
       />
 
+      {/* Sección Bibliotecas del admin: estadísticas de ocupación de la
+          Biblioteca Cisco + acceso a la cámara en tiempo real. */}
+      <Tabs.Screen
+        name="bibliotecas"
+        options={{
+          title: 'Bibliotecas',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="library-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
       <Tabs.Screen
         name="reservas"
         options={{
@@ -71,6 +83,11 @@ export default function AdminLayout() {
           href: null,
         }}
       />
+
+      {/* Pantallas internas de Bibliotecas (sin pestaña propia): ubicación en
+          el mapa y cámara en tiempo real (esta última exclusiva del admin). */}
+      <Tabs.Screen name="biblioteca-ubicacion/[spaceId]" options={{ href: null }} />
+      <Tabs.Screen name="biblioteca-camara/[spaceId]" options={{ href: null }} />
 
       <Tabs.Screen name="perfil" options={{ href: null }} />
     </Tabs>
