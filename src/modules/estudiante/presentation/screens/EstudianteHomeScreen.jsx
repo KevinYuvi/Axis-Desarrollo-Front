@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { crearConexionRealtime } from '../../../../shared/realtime/realtimeClient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -96,9 +97,8 @@ export default function EstudianteHomeScreen() {
       );
 
       const bibliotecas = espaciosConDatos.filter((item) => {
-        const texto = `${item.name || ''} ${item.nombre || ''} ${
-          item.type || ''
-        } ${item.tipo || ''}`.toLowerCase();
+        const texto = `${item.name || ''} ${item.nombre || ''} ${item.type || ''
+          } ${item.tipo || ''}`.toLowerCase();
 
         return texto.includes('biblioteca');
       });
@@ -128,7 +128,24 @@ export default function EstudianteHomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      cargarDatos();
+      cargarDatos({ silencioso: true });
+
+      const realtime = crearConexionRealtime({
+        onEvento: (evento) => {
+          if (
+            evento.tipo === 'reservas_actualizadas' ||
+            evento.tipo === 'aulas_actualizadas' ||
+            evento.tipo === 'reportes_actualizados' ||
+            evento.tipo === 'ocupacion_actualizada'
+          ) {
+            cargarDatos({ silencioso: true });
+          }
+        },
+      });
+
+      return () => {
+        realtime?.cerrar();
+      };
     }, [])
   );
 
@@ -181,9 +198,8 @@ export default function EstudianteHomeScreen() {
                 <Text style={styles.headerTitle}>Tu actividad de hoy</Text>
                 <Text style={styles.headerSubtitle}>
                   {clasesHoy.length > 0
-                    ? `${clasesHoy.length} ${
-                        clasesHoy.length === 1 ? 'clase registrada' : 'clases registradas'
-                      } para hoy.`
+                    ? `${clasesHoy.length} ${clasesHoy.length === 1 ? 'clase registrada' : 'clases registradas'
+                    } para hoy.`
                     : 'No tienes clases registradas para hoy.'}
                 </Text>
               </View>

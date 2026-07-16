@@ -6,7 +6,6 @@ import { spacing } from '../../theme/spacing';
 export default function Header({ title, subtitle }) {
   return (
     <View style={styles.container}>
-      <Text style={styles.brand}>Axis</Text>
       {title && <Text style={styles.title}>{title}</Text>}
       {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
     </View>

@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { crearConexionRealtime } from '../../../../shared/realtime/realtimeClient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -75,7 +76,22 @@ export default function EstudianteClasesScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      cargarDatos();
+      cargarDatos({ silencioso: true });
+
+      const realtime = crearConexionRealtime({
+        onEvento: (evento) => {
+          if (
+            evento.tipo === 'reservas_actualizadas' ||
+            evento.tipo === 'aulas_actualizadas'
+          ) {
+            cargarDatos({ silencioso: true });
+          }
+        },
+      });
+
+      return () => {
+        realtime?.cerrar();
+      };
     }, [])
   );
 
@@ -191,9 +207,8 @@ export default function EstudianteClasesScreen() {
 
           <InfoRow
             icon="business-outline"
-            text={`${clasePrincipal.aula || 'Aula no registrada'} · ${
-              clasePrincipal.edificio?.nombre || 'Edificio no registrado'
-            }`}
+            text={`${clasePrincipal.aula || 'Aula no registrada'} · ${clasePrincipal.edificio?.nombre || 'Edificio no registrado'
+              }`}
           />
 
           <InfoRow
@@ -254,9 +269,8 @@ export default function EstudianteClasesScreen() {
         <View style={styles.classInfo}>
           <InfoRow
             icon="business-outline"
-            text={`${clase.aula || 'Aula no registrada'} · ${
-              clase.edificio?.nombre || 'Edificio'
-            }`}
+            text={`${clase.aula || 'Aula no registrada'} · ${clase.edificio?.nombre || 'Edificio'
+              }`}
           />
 
           <InfoRow

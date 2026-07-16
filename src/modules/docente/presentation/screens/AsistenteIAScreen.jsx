@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   StatusBar,
@@ -54,6 +55,7 @@ export default function AsistenteIAScreen({ token, rol }) {
   const [audioUri, setAudioUri] = useState(null);
   const [mostrarRapidas, setMostrarRapidas] = useState(false);
   const [aulaSeleccionada, setAulaSeleccionada] = useState(null);
+  const [tecladoVisible, setTecladoVisible] = useState(false);
 
   const [mensajes, setMensajes] = useState([
     {
@@ -71,7 +73,24 @@ export default function AsistenteIAScreen({ token, rol }) {
       limpiarTemporizador();
     };
   }, []);
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => {
+      setTecladoVisible(true);
 
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 120);
+    });
+
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setTecladoVisible(false);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
   useEffect(() => {
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
@@ -798,7 +817,8 @@ export default function AsistenteIAScreen({ token, rol }) {
 
       <KeyboardAvoidingView
         style={styles.body}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
         <FlatList
           ref={flatListRef}
@@ -806,8 +826,13 @@ export default function AsistenteIAScreen({ token, rol }) {
           keyExtractor={(item) => item.id}
           renderItem={renderMensaje}
           ListFooterComponent={renderTyping}
-          contentContainerStyle={styles.messagesContent}
+          contentContainerStyle={[
+            styles.messagesContent,
+            tecladoVisible && styles.messagesContentKeyboard,
+          ]}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
         />
 
         {mostrarRapidas && (
@@ -863,7 +888,7 @@ export default function AsistenteIAScreen({ token, rol }) {
           </View>
         )}
 
-        <View style={styles.inputArea}>
+        <View style={[styles.inputArea, tecladoVisible && styles.inputAreaKeyboard]}>
           <TouchableOpacity
             style={[
               styles.roundBtn,
@@ -1342,15 +1367,17 @@ const styles = StyleSheet.create({
 
   input: {
     minHeight: 44,
-    maxHeight: 92,
+    maxHeight: 104,
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 22,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: Platform.OS === 'ios' ? spacing.sm : 9,
+    paddingBottom: Platform.OS === 'ios' ? spacing.sm : 9,
     fontSize: typography.size.sm,
     color: colors.textPrimary,
+    textAlignVertical: 'top',
   },
 
   audioInputCard: {
@@ -1414,5 +1441,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: spacing.sm,
+  },
+  messagesContentKeyboard: {
+    paddingBottom: spacing.xl,
+  },
+
+  inputAreaKeyboard: {
+    paddingBottom: Platform.OS === 'android' ? spacing.md : spacing.sm,
   },
 });
