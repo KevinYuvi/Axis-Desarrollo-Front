@@ -138,6 +138,12 @@ export async function obtenerReservasAdmin(token) {
   return fetchConToken('/api/v1/reservas/', token);
 }
 
+export async function liberarReservaAdmin(token, reservaId) {
+  return fetchConToken(`/api/v1/reservas/${reservaId}/liberar`, token, {
+    method: 'PATCH',
+  });
+}
+
 export async function obtenerReportesAdmin(token) {
   return fetchConToken('/api/v1/reportes/', token);
 }
@@ -152,6 +158,30 @@ export async function actualizarEstadoReporteAdmin(token, reporteId, nuevoEstado
       method: 'PATCH',
     }
   );
+}
+
+export function obtenerApiUrl() {
+  if (!API_URL) {
+    throw new Error('Falta EXPO_PUBLIC_API_URL en el archivo .env.');
+  }
+
+  return API_URL;
+}
+
+export function construirUrlArchivo(url) {
+  if (!url) return null;
+
+  if (String(url).startsWith('http')) {
+    return url;
+  }
+
+  const baseUrl = obtenerApiUrl();
+
+  if (String(url).startsWith('/')) {
+    return `${baseUrl}${url}`;
+  }
+
+  return `${baseUrl}/${url}`;
 }
 
 export async function obtenerResumenAdmin(token) {
@@ -193,4 +223,8 @@ export async function obtenerResumenAdmin(token) {
       ).length,
     },
   };
+}
+
+export async function obtenerReporteDetalleAdmin(token, reporteId) {
+  return fetchConToken(`/api/v1/reportes/${reporteId}`, token);
 }

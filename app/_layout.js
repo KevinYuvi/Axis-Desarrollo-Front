@@ -1,5 +1,10 @@
 import { useEffect } from 'react';
-import { Slot, useRouter, useSegments } from 'expo-router';
+import {
+  Slot,
+  useRouter,
+  useSegments,
+  useRootNavigationState,
+} from 'expo-router';
 import { ClerkProvider, useAuth, useUser } from '@clerk/clerk-expo';
 import { View, ActivityIndicator } from 'react-native';
 
@@ -26,19 +31,26 @@ function normalizarRol(rolRaw) {
 function obtenerRutaPorRol(rolRaw) {
   const rol = normalizarRol(rolRaw);
 
-  if (rol === 'docente') {
-    return '/(docente)';
-  }
-
-  if (rol === 'admin') {
-    return '/(admin)';
-  }
-
-  if (rol === 'ayudante') {
-    return '/(ayudante)';
-  }
+  if (rol === 'docente') return '/(docente)';
+  if (rol === 'admin') return '/(admin)';
+  if (rol === 'ayudante') return '/(ayudante)';
 
   return '/(estudiante)';
+}
+
+function LoadingScreen() {
+  return (
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: '#FFFFFF',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <ActivityIndicator size="large" color="#2F80ED" />
+    </View>
+  );
 }
 
 function InitialLayout() {
@@ -47,8 +59,10 @@ function InitialLayout() {
 
   const segments = useSegments();
   const router = useRouter();
+  const rootNavigationState = useRootNavigationState();
 
   useEffect(() => {
+    if (!rootNavigationState?.key) return;
     if (!isLoaded || !userLoaded) return;
 
     const grupoActual = segments[0];
@@ -76,7 +90,6 @@ function InitialLayout() {
       'estudiante';
 
     const rutaCorrecta = obtenerRutaPorRol(rol);
-
     const grupoCorrecto = rutaCorrecta.replace('/', '');
 
     if (estaEnAuth || !estaEnGrupoProtegido) {
@@ -87,21 +100,17 @@ function InitialLayout() {
     if (grupoActual !== grupoCorrecto) {
       router.replace(rutaCorrecta);
     }
-  }, [isLoaded, userLoaded, isSignedIn, user?.id, segments]);
+  }, [
+    rootNavigationState?.key,
+    isLoaded,
+    userLoaded,
+    isSignedIn,
+    user?.id,
+    segments,
+  ]);
 
-  if (!isLoaded || !userLoaded) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: '#FFFFFF',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <ActivityIndicator size="large" color="#2F80ED" />
-      </View>
-    );
+  if (!rootNavigationState?.key || !isLoaded || !userLoaded) {
+    return <LoadingScreen />;
   }
 
   return <Slot />;

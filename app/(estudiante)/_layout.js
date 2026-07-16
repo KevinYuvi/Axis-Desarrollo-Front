@@ -1,27 +1,28 @@
-import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors } from '../../src/shared/theme/colors';
+import { typography } from '../../src/shared/theme/typography';
 
-export default function AdminLayout() {
+export default function EstudianteLayout() {
   return (
     <Tabs
+      initialRouteName="index"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: '#8A8F98',
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: typography.weight.bold,
+        },
         tabBarStyle: {
           height: 64,
           paddingTop: 6,
           paddingBottom: 8,
           borderTopWidth: 1,
-          borderTopColor: '#E5E7EB',
-          backgroundColor: '#FFFFFF',
-        },
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '700',
+          borderTopColor: colors.border,
+          backgroundColor: colors.white,
         },
       }}
     >
@@ -36,21 +37,21 @@ export default function AdminLayout() {
       />
 
       <Tabs.Screen
-        name="aulas"
+        name="clases"
         options={{
-          title: 'Aulas',
+          title: 'Clases',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="business-outline" size={size} color={color} />
+            <Ionicons name="calendar-outline" size={size} color={color} />
           ),
         }}
       />
 
       <Tabs.Screen
-        name="reservas"
+        name="bibliotecas"
         options={{
-          title: 'Reservas',
+          title: 'Bibliotecas',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar-outline" size={size} color={color} />
+            <Ionicons name="library-outline" size={size} color={color} />
           ),
         }}
       />
@@ -60,7 +61,7 @@ export default function AdminLayout() {
         options={{
           title: 'Reportes',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="ticket-outline" size={size} color={color} />
+            <Ionicons name="document-text-outline" size={size} color={color} />
           ),
         }}
       />
@@ -73,6 +74,9 @@ export default function AdminLayout() {
       />
 
       <Tabs.Screen name="perfil" options={{ href: null }} />
+      <Tabs.Screen name="reportar-actual" options={{ href: null }} />
+      <Tabs.Screen name="clase/[claseId]" options={{ href: null }} />
+      <Tabs.Screen name="ruta-clase/[claseId]" options={{ href: null }} />
     </Tabs>
   );
 }

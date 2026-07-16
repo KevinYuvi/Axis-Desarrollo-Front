@@ -2,10 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import { useAxisToken } from '../../src/shared/hooks/useAxisToken';
-import { ReportesScreen } from '../../src/modules/docente';
+import { useAxisToken } from '../src/shared/hooks/useAxisToken';
+import { AsistenteIAScreen } from '../src/modules/docente';
 
-export default function ReportesRoute() {
+export default function AsistenteRoute() {
   const router = useRouter();
   const { obtenerTokenAxis, isLoaded, isSignedIn } = useAxisToken();
 
@@ -30,7 +30,7 @@ export default function ReportesRoute() {
           setToken(tokenAxis);
         }
       } catch (error) {
-        console.error('Error obteniendo token Axis en reportes:', error);
+        console.error('Error obteniendo token Axis en asistente:', error);
         Alert.alert('Error', 'No se pudo obtener el token de sesión.');
       } finally {
         if (activo && isLoaded) {
@@ -62,7 +62,7 @@ export default function ReportesRoute() {
   }
 
   return (
-    <ReportesScreen
+    <AsistenteIAScreen
       token={token}
       onBack={() => router.replace('/(dashboard)')}
     />

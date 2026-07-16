@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/clerk-expo';
 import { useRouter, useFocusEffect } from 'expo-router';
-
+import { crearConexionRealtime } from '../../../../shared/realtime/realtimeClient';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
@@ -202,7 +202,7 @@ export default function DocenteHomeScreen({ token }) {
 
         throw new Error(
           data?.detail ||
-            `Error al obtener el cronograma de hoy. Status: ${responseClasesHoy.status}`
+          `Error al obtener el cronograma de hoy. Status: ${responseClasesHoy.status}`
         );
       }
 
@@ -229,13 +229,23 @@ export default function DocenteHomeScreen({ token }) {
 
   useFocusEffect(
     useCallback(() => {
-      setPantallaActual('home');
-      setClaseSeleccionada(null);
+      cargarCronograma({ silencioso: true });
 
-      cargarCronograma({
-        silencioso: yaCargoPrimeraVez,
+      const realtime = crearConexionRealtime({
+        onEvento: (evento) => {
+          if (
+            evento.tipo === 'reservas_actualizadas' ||
+            evento.tipo === 'aulas_actualizadas'
+          ) {
+            cargarCronograma({ silencioso: true });
+          }
+        },
       });
-    }, [yaCargoPrimeraVez])
+
+      return () => {
+        realtime?.cerrar();
+      };
+    }, [])
   );
 
   const formatHorario = (isoInicio, isoFin) => {

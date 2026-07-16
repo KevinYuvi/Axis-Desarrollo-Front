@@ -16,10 +16,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/clerk-expo';
 
+import AppHeader from '../../../../shared/components/organisms/AppHeader';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
-import { AppHeader } from '../../../../shared/components';
 
 import {
   AudioModule,
@@ -33,13 +33,13 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL;
 const CLERK_JWT_TEMPLATE = 'Axis';
 
 const preguntasRapidas = [
-  '¿Qué biblioteca tiene más espacio disponible ahora?',
-  '¿Dónde queda el Laboratorio de Computación 3?',
-  '¿Tengo una clase activa en este momento?',
-  'El proyector del Laboratorio 3 no enciende.',
+  'Enlístame las aulas disponibles ahora.',
+  'Quiero reservar el Aula 5 mañana de 7 am a 9 am.',
+  '¿Qué horarios tiene el Aula 4?',
+  'El proyector del Aula 4 no funciona.',
 ];
 
-export default function AsistenteIAScreen({ token, onBack, rol }) {
+export default function AsistenteIAScreen({ token, rol }) {
   const { getToken } = useAuth();
 
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -53,13 +53,14 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
   const [segundosGrabando, setSegundosGrabando] = useState(0);
   const [audioUri, setAudioUri] = useState(null);
   const [mostrarRapidas, setMostrarRapidas] = useState(false);
+  const [aulaSeleccionada, setAulaSeleccionada] = useState(null);
 
   const [mensajes, setMensajes] = useState([
     {
       id: 'inicio',
       tipo: 'ia',
       texto:
-        'Hola, soy tu asistente de Axis. Puedes escribirme o enviarme un audio.',
+        'Puedo ayudarte a reservar aulas, consultar disponibilidad o registrar reportes.',
     },
   ]);
 
@@ -83,13 +84,8 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
       skipCache: true,
     });
 
-    if (tokenActual) {
-      return tokenActual;
-    }
-
-    if (token) {
-      return token;
-    }
+    if (tokenActual) return tokenActual;
+    if (token) return token;
 
     throw new Error('No se pudo obtener una sesión activa. Vuelve a iniciar sesión.');
   };
@@ -97,15 +93,47 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
   const leerRespuestaSegura = async (response, valorInicial = {}) => {
     const rawText = await response.text();
 
-    if (!rawText) {
-      return valorInicial;
-    }
+    if (!rawText) return valorInicial;
 
     try {
       return JSON.parse(rawText);
     } catch {
       return valorInicial;
     }
+  };
+
+  const convertirErrorAtexto = (errorData) => {
+    if (!errorData) return 'No se pudo procesar la solicitud.';
+    if (typeof errorData === 'string') return errorData;
+
+    if (Array.isArray(errorData)) {
+      return errorData
+        .map((item) => convertirErrorAtexto(item))
+        .filter(Boolean)
+        .join('\n');
+    }
+
+    if (typeof errorData === 'object') {
+      if (errorData.msg) {
+        const campo = Array.isArray(errorData.loc)
+          ? errorData.loc.filter((item) => item !== 'body').join(' > ')
+          : '';
+
+        return campo ? `${campo}: ${errorData.msg}` : errorData.msg;
+      }
+
+      if (errorData.message) return convertirErrorAtexto(errorData.message);
+      if (errorData.detail) return convertirErrorAtexto(errorData.detail);
+      if (errorData.error) return convertirErrorAtexto(errorData.error);
+
+      try {
+        return JSON.stringify(errorData, null, 2);
+      } catch {
+        return 'No se pudo procesar la solicitud.';
+      }
+    }
+
+    return String(errorData);
   };
 
   const validarApiUrl = () => {
@@ -248,6 +276,22 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
     await enviarSolicitud(pregunta, null, null);
   };
 
+  const construirTextoConContexto = (textoEnviar) => {
+    const textoBase = String(textoEnviar || '').trim();
+
+    if (!aulaSeleccionada?.nombre) {
+      return textoBase;
+    }
+
+    const contexto = `Aula seleccionada: ${aulaSeleccionada.nombre}`;
+
+    if (!textoBase) {
+      return contexto;
+    }
+
+    return `${textoBase}. ${contexto}`;
+  };
+
   const enviarSolicitud = async (
     textoEnviar = '',
     uriAudio = null,
@@ -278,9 +322,10 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
       }
 
       const formData = new FormData();
+      const textoConContexto = construirTextoConContexto(textoEnviar);
 
-      if (textoEnviar) {
-        formData.append('texto_chat', textoEnviar);
+      if (textoConContexto) {
+        formData.append('texto_chat', textoConContexto);
       }
 
       if (uriAudio) {
@@ -310,14 +355,25 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
       const data = await leerRespuestaSegura(response, {});
 
       if (!response.ok) {
-        throw new Error(data?.detail || 'No se pudo procesar la solicitud.');
+        console.log('ERROR BACKEND IA:', data);
+
+        const mensajeError = convertirErrorAtexto(data);
+
+        throw new Error(mensajeError || 'No se pudo procesar la solicitud.');
       }
 
       agregarMensaje({
         tipo: 'ia',
-        texto: data?.respuesta_app || 'Listo, procesé tu solicitud.',
+        texto: construirTextoRespuesta(data),
         detalle: data,
       });
+
+      if (
+        data?.accion === 'RESERVA' &&
+        ['success', 'cancelada'].includes(data?.status)
+      ) {
+        setAulaSeleccionada(null);
+      }
     } catch (error) {
       console.error('Error enviando solicitud IA:', error);
 
@@ -331,6 +387,226 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
     } finally {
       setEnviando(false);
     }
+  };
+
+  const construirTextoRespuesta = (data) => {
+    if (!data) return 'Listo, procesé tu solicitud.';
+
+    if (Array.isArray(data.espacios) && data.espacios.length > 0) {
+      const total = data.espacios.length;
+
+      if (
+        data.respuesta_app?.toLowerCase?.().includes('disponible') ||
+        data.origen_peticion?.toLowerCase?.().includes('disponible')
+      ) {
+        return `Encontré ${total} espacio${total === 1 ? '' : 's'} disponible${total === 1 ? '' : 's'}. Selecciona uno para continuar.`;
+      }
+
+      return `Encontré ${total} espacio${total === 1 ? '' : 's'}. Selecciona uno para continuar.`;
+    }
+
+    return data?.respuesta_app || 'Listo, procesé tu solicitud.';
+  };
+
+  const obtenerAulaDetalle = (detalle) => {
+    return (
+      detalle?.aula_identificada ||
+      detalle?.reserva?.espacio_nombre ||
+      detalle?.reserva_pendiente?.espacio_nombre ||
+      detalle?.detalle_aula?.nombre ||
+      null
+    );
+  };
+
+  const parseFechaBackend = (valor) => {
+    if (!valor) return null;
+    if (valor instanceof Date) return valor;
+
+    const textoFecha = String(valor).replace(' ', 'T');
+    const fecha = new Date(textoFecha);
+
+    if (Number.isNaN(fecha.getTime())) return null;
+
+    return fecha;
+  };
+
+  const formatearFechaHoraCorta = (valor) => {
+    const fecha = parseFechaBackend(valor);
+
+    if (!fecha) return String(valor || '');
+
+    const hoy = new Date();
+    const manana = new Date();
+    manana.setDate(hoy.getDate() + 1);
+
+    const mismaFecha =
+      fecha.getFullYear() === hoy.getFullYear() &&
+      fecha.getMonth() === hoy.getMonth() &&
+      fecha.getDate() === hoy.getDate();
+
+    const esManana =
+      fecha.getFullYear() === manana.getFullYear() &&
+      fecha.getMonth() === manana.getMonth() &&
+      fecha.getDate() === manana.getDate();
+
+    const hora = fecha.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+
+    if (mismaFecha) return `Hoy ${hora}`;
+    if (esManana) return `Mañana ${hora}`;
+
+    return `${fecha.toLocaleDateString()} ${hora}`;
+  };
+
+  const formatearSoloHora = (valor) => {
+    const fecha = parseFechaBackend(valor);
+
+    if (!fecha) return String(valor || '');
+
+    return fecha.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  };
+
+  const seleccionarAula = (espacio) => {
+    setAulaSeleccionada(espacio);
+
+    agregarMensaje({
+      tipo: 'ia',
+      texto: `Seleccionaste ${espacio.nombre}. Ahora puedes pedir el horario, hacer una reserva o registrar un reporte sobre esta aula.`,
+      seleccionContextual: true,
+    });
+  };
+
+  const renderResumenReserva = (detalle) => {
+    if (!detalle || detalle.accion !== 'RESERVA') return null;
+
+    const aula = obtenerAulaDetalle(detalle);
+    const reserva = detalle.reserva || detalle.reserva_pendiente;
+
+    let subtitulo = aula || 'Aula seleccionada';
+
+    if (reserva?.hora_inicio && reserva?.hora_fin) {
+      subtitulo = `${aula || 'Aula'} · ${formatearFechaHoraCorta(
+        reserva.hora_inicio
+      )} - ${formatearSoloHora(reserva.hora_fin)}`;
+    }
+
+    return (
+      <View style={styles.cleanCard}>
+        <View style={styles.cleanIconBlue}>
+          <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+        </View>
+
+        <View style={styles.cleanTextBox}>
+          <Text style={styles.cleanTitle}>
+            {detalle.status === 'success'
+              ? 'Reserva creada'
+              : detalle.status === 'cancelada'
+                ? 'Reserva cancelada'
+                : detalle.status === 'requiere_horario'
+                  ? 'Falta el horario'
+                  : detalle.status === 'error'
+                    ? 'No disponible'
+                    : 'Reserva por confirmar'}
+          </Text>
+
+          <Text style={styles.cleanSubtitle}>{subtitulo}</Text>
+        </View>
+      </View>
+    );
+  };
+
+  const renderResumenReporte = (detalle) => {
+    if (!detalle || detalle.accion !== 'REPORTE') return null;
+
+    const aula = obtenerAulaDetalle(detalle);
+
+    return (
+      <View style={styles.cleanCard}>
+        <View style={styles.cleanIconOrange}>
+          <Ionicons name="construct-outline" size={18} color="#D97706" />
+        </View>
+
+        <View style={styles.cleanTextBox}>
+          <Text style={styles.cleanTitle}>Reporte registrado</Text>
+          <Text style={styles.cleanSubtitle}>{aula || 'Aula asociada'}</Text>
+        </View>
+      </View>
+    );
+  };
+
+  const renderEspaciosSeleccionables = (detalle) => {
+    if (!Array.isArray(detalle?.espacios) || detalle.espacios.length === 0) {
+      return null;
+    }
+
+    return (
+      <View style={styles.selectableList}>
+        {detalle.espacios.slice(0, 6).map((espacio) => {
+          const estaSeleccionada = aulaSeleccionada?.id === espacio.id;
+
+          return (
+            <TouchableOpacity
+              key={espacio.id}
+              style={[
+                styles.selectableCard,
+                estaSeleccionada && styles.selectableCardActive,
+              ]}
+              onPress={() => seleccionarAula(espacio)}
+              activeOpacity={0.85}
+              disabled={enviando}
+            >
+              <View style={styles.selectableTop}>
+                <View
+                  style={[
+                    styles.spaceIconBox,
+                    estaSeleccionada && styles.spaceIconBoxActive,
+                  ]}
+                >
+                  <Ionicons
+                    name={estaSeleccionada ? 'checkmark' : 'business-outline'}
+                    size={17}
+                    color={estaSeleccionada ? colors.white : colors.primary}
+                  />
+                </View>
+
+                <View style={styles.spaceInfo}>
+                  <Text style={styles.spaceName}>{espacio.nombre}</Text>
+
+                  <Text style={styles.spaceMeta}>
+                    {espacio.bloque || 'Sin bloque'} · {espacio.tipo || 'Espacio'}
+                  </Text>
+                </View>
+
+                <Ionicons
+                  name="chevron-forward"
+                  size={17}
+                  color={colors.textMuted}
+                />
+              </View>
+
+              {estaSeleccionada && (
+                <Text style={styles.selectedHint}>
+                  Aula seleccionada para la siguiente consulta.
+                </Text>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+
+        {detalle.espacios.length > 6 && (
+          <Text style={styles.moreSpacesText}>
+            +{detalle.espacios.length - 6} espacio(s) más
+          </Text>
+        )}
+      </View>
+    );
   };
 
   const renderMensaje = ({ item }) => {
@@ -363,6 +639,7 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
                 size={16}
                 color={esUsuario ? colors.white : colors.primary}
               />
+
               <Text
                 style={[
                   styles.messageText,
@@ -383,27 +660,9 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
             </Text>
           )}
 
-          {item.detalle?.aula_identificada && (
-            <View style={styles.resultCard}>
-              <Text style={styles.resultTitle}>
-                {item.detalle.aula_identificada}
-              </Text>
-
-              {item.detalle.accion && (
-                <Text style={styles.resultSub}>
-                  Acción: {item.detalle.accion}
-                </Text>
-              )}
-
-              {item.detalle.status && (
-                <View style={styles.statusMiniBadge}>
-                  <Text style={styles.statusMiniText}>
-                    {item.detalle.status}
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
+          {!item.error && renderResumenReserva(item.detalle)}
+          {!item.error && renderResumenReporte(item.detalle)}
+          {!item.error && renderEspaciosSeleccionables(item.detalle)}
 
           {item.detalle?.status === 'pendiente_confirmacion' &&
             item.detalle?.accion === 'RESERVA' && (
@@ -419,7 +678,7 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
 
                 <TouchableOpacity
                   style={styles.confirmNoBtn}
-                  onPress={() => enviarSolicitud('No, cancelar', null, null)}
+                  onPress={() => enviarSolicitud('cancelar reserva', null, null)}
                   disabled={enviando}
                 >
                   <Ionicons name="close" size={16} color="#DC2626" />
@@ -500,7 +759,11 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
     return (
       <TextInput
         style={styles.input}
-        placeholder="Escribe tu consulta..."
+        placeholder={
+          aulaSeleccionada
+            ? 'Pide horario, reserva o reporte...'
+            : 'Escribe tu consulta...'
+        }
         placeholderTextColor={colors.textMuted}
         value={texto}
         onChangeText={setTexto}
@@ -514,33 +777,24 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
     <SafeAreaView style={styles.screen} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
 
-      {onBack ? (
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={onBack}
-            accessibilityLabel="Volver"
-          >
-            <Ionicons name="arrow-back" size={22} color={colors.primary} />
-          </TouchableOpacity>
+      <AppHeader rol={rol || 'docente'} />
 
-          <View style={styles.headerBrand}>
-            <View style={styles.headerIcon}>
-              <Ionicons
-                name="hardware-chip-outline"
-                size={17}
-                color={colors.white}
-              />
-            </View>
-
-            <Text style={styles.headerTitle}>Asistente IA</Text>
-          </View>
-
-          <View style={styles.headerSpacer} />
+      <View style={styles.pageHeader}>
+        <View style={styles.pageIcon}>
+          <Ionicons
+            name="hardware-chip-outline"
+            size={17}
+            color={colors.primary}
+          />
         </View>
-      ) : (
-        <AppHeader rol={rol || 'estudiante'} />
-      )}
+
+        <View style={styles.pageHeaderText}>
+          <Text style={styles.pageTitle}>Asistente IA</Text>
+          <Text style={styles.pageSubtitle}>
+            Reservas, reportes y disponibilidad
+          </Text>
+        </View>
+      </View>
 
       <KeyboardAvoidingView
         style={styles.body}
@@ -586,6 +840,26 @@ export default function AsistenteIAScreen({ token, onBack, rol }) {
                 </TouchableOpacity>
               )}
             />
+          </View>
+        )}
+
+        {aulaSeleccionada && (
+          <View style={styles.selectedAulaBar}>
+            <View style={styles.selectedAulaInfo}>
+              <Ionicons name="business-outline" size={16} color={colors.primary} />
+
+              <Text style={styles.selectedAulaText} numberOfLines={1}>
+                Aula seleccionada: {aulaSeleccionada.nombre}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.selectedAulaClose}
+              onPress={() => setAulaSeleccionada(null)}
+              disabled={enviando}
+            >
+              <Ionicons name="close" size={16} color={colors.textSecondary} />
+            </TouchableOpacity>
           </View>
         )}
 
@@ -649,7 +923,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
   },
 
-  header: {
+  pageHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
@@ -659,40 +933,30 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
 
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#F8FAFC',
+  pageIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.sm,
   },
 
-  headerBrand: {
+  pageHeaderText: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
   },
 
-  headerIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  headerTitle: {
+  pageTitle: {
     fontSize: typography.size.md,
     fontWeight: typography.weight.bold,
     color: colors.textPrimary,
   },
 
-  headerSpacer: {
-    width: 38,
+  pageSubtitle: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    marginTop: 1,
   },
 
   body: {
@@ -731,7 +995,7 @@ const styles = StyleSheet.create({
   },
 
   messageBubble: {
-    maxWidth: '78%',
+    maxWidth: '82%',
     borderRadius: 18,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -754,7 +1018,7 @@ const styles = StyleSheet.create({
 
   messageText: {
     fontSize: typography.size.sm,
-    lineHeight: 20,
+    lineHeight: 21,
   },
 
   iaText: {
@@ -783,40 +1047,160 @@ const styles = StyleSheet.create({
     marginLeft: spacing.sm,
   },
 
-  resultCard: {
-    backgroundColor: colors.background,
+  cleanCard: {
+    marginTop: spacing.sm,
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     padding: spacing.sm,
-    marginTop: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 
-  resultTitle: {
+  cleanIconBlue: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+
+  cleanIconOrange: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFF7ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+
+  cleanTextBox: {
+    flex: 1,
+  },
+
+  cleanTitle: {
     fontSize: typography.size.sm,
     fontWeight: typography.weight.bold,
     color: colors.textPrimary,
   },
 
-  resultSub: {
+  cleanSubtitle: {
     fontSize: typography.size.xs,
     color: colors.textSecondary,
     marginTop: 3,
+    lineHeight: 17,
   },
 
-  statusMiniBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#D1FAE5',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
-    borderRadius: radius.full,
+  selectableList: {
+    marginTop: spacing.sm,
+    gap: spacing.sm,
+  },
+
+  selectableCard: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: spacing.sm,
+  },
+
+  selectableCardActive: {
+    borderColor: colors.primary,
+    backgroundColor: '#EFF6FF',
+  },
+
+  selectableTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  spaceIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+
+  spaceIconBoxActive: {
+    backgroundColor: colors.primary,
+  },
+
+  spaceInfo: {
+    flex: 1,
+  },
+
+  spaceName: {
+    fontSize: typography.size.xs,
+    color: colors.textPrimary,
+    fontWeight: typography.weight.bold,
+  },
+
+  spaceMeta: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+
+  selectedHint: {
+    fontSize: 11,
+    color: colors.primary,
+    fontWeight: typography.weight.semibold,
     marginTop: spacing.sm,
   },
 
-  statusMiniText: {
-    fontSize: 11,
-    color: '#047857',
+  selectedAulaBar: {
+    backgroundColor: colors.white,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  selectedAulaInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    marginRight: spacing.sm,
+  },
+
+  selectedAulaText: {
+    flex: 1,
+    marginLeft: 7,
+    fontSize: typography.size.xs,
+    color: colors.primary,
     fontWeight: typography.weight.bold,
+  },
+
+  selectedAulaClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  moreSpacesText: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontWeight: typography.weight.bold,
+    marginTop: 2,
   },
 
   confirmActions: {

@@ -60,18 +60,37 @@ export default function ReportarIncidenciaScreen({ token, claseActual, onBack })
   const [modalMensaje, setModalMensaje] = useState('');
   const [modalAccion, setModalAccion] = useState(null);
 
-  const aulaNombre = claseActual?.espacio?.nombre || 'Aula no identificada';
-  const aulaBloque = claseActual?.espacio?.bloque || 'Sin bloque';
-  const materia = claseActual?.reserva?.materia || 'Clase actual';
+  const espacioId =
+    claseActual?.espacio?.id ||
+    claseActual?.espacio?._id ||
+    claseActual?.espacio_id ||
+    claseActual?.reserva?.espacio_id ||
+    '';
+
+  const aulaNombre =
+    claseActual?.espacio?.nombre ||
+    claseActual?.espacio_nombre ||
+    claseActual?.reserva?.espacio_nombre ||
+    'Aula no identificada';
+
+  const aulaBloque =
+    claseActual?.espacio?.bloque ||
+    claseActual?.bloque ||
+    'Sin bloque';
+
+  const materia =
+    claseActual?.reserva?.materia ||
+    claseActual?.materia ||
+    'Clase actual';
 
   const obtenerTokenActual = async () => {
-    const tokenActual = await getToken({
+    const tokenClerk = await getToken({
       template: CLERK_JWT_TEMPLATE,
       skipCache: true,
     });
 
-    if (tokenActual) {
-      return tokenActual;
+    if (tokenClerk) {
+      return tokenClerk;
     }
 
     if (token) {
@@ -91,8 +110,57 @@ export default function ReportarIncidenciaScreen({ token, claseActual, onBack })
     try {
       return JSON.parse(rawText);
     } catch {
-      return valorInicial;
+      return {
+        detail: rawText,
+      };
     }
+  };
+
+  const convertirErrorAtexto = (errorData) => {
+    if (!errorData) {
+      return 'No se pudo generar el reporte.';
+    }
+
+    if (typeof errorData === 'string') {
+      return errorData;
+    }
+
+    if (Array.isArray(errorData)) {
+      return errorData
+        .map((item) => convertirErrorAtexto(item))
+        .filter(Boolean)
+        .join('\n');
+    }
+
+    if (typeof errorData === 'object') {
+      if (errorData.msg) {
+        const campo = Array.isArray(errorData.loc)
+          ? errorData.loc.filter((item) => item !== 'body').join(' > ')
+          : '';
+
+        return campo ? `${campo}: ${errorData.msg}` : errorData.msg;
+      }
+
+      if (errorData.message) {
+        return convertirErrorAtexto(errorData.message);
+      }
+
+      if (errorData.detail) {
+        return convertirErrorAtexto(errorData.detail);
+      }
+
+      if (errorData.error) {
+        return convertirErrorAtexto(errorData.error);
+      }
+
+      try {
+        return JSON.stringify(errorData, null, 2);
+      } catch {
+        return 'No se pudo generar el reporte.';
+      }
+    }
+
+    return String(errorData);
   };
 
   const mostrarModal = ({ tipo = 'info', titulo, mensaje, accion = null }) => {
@@ -113,23 +181,24 @@ export default function ReportarIncidenciaScreen({ token, claseActual, onBack })
     setModalAccion(null);
   };
 
-  const enviarReporte = async () => {
+  const validarFormulario = () => {
     if (!API_URL) {
       mostrarModal({
         tipo: 'error',
         titulo: 'Error',
         mensaje: 'Falta EXPO_PUBLIC_API_URL en el archivo .env.',
       });
-      return;
+      return false;
     }
 
-    if (!claseActual?.espacio?.id) {
+    if (!espacioId) {
       mostrarModal({
         tipo: 'warning',
         titulo: 'Sin aula',
-        mensaje: 'No se pudo identificar el aula afectada.',
+        mensaje:
+          'No se pudo identificar el aula afectada. Vuelve al inicio y entra nuevamente a la clase actual.',
       });
-      return;
+      return false;
     }
 
     if (!descripcion.trim()) {
@@ -138,6 +207,25 @@ export default function ReportarIncidenciaScreen({ token, claseActual, onBack })
         titulo: 'Campo requerido',
         mensaje: 'Describe brevemente el problema encontrado.',
       });
+      return false;
+    }
+
+    if (descripcion.trim().length < 10) {
+      mostrarModal({
+        tipo: 'warning',
+        titulo: 'Descripción muy corta',
+        mensaje: 'La descripción debe tener al menos 10 caracteres.',
+      });
+      return false;
+    }
+
+    return true;
+  };
+
+  const enviarReporte = async () => {
+    const formularioValido = validarFormulario();
+
+    if (!formularioValido) {
       return;
     }
 
@@ -147,10 +235,12 @@ export default function ReportarIncidenciaScreen({ token, claseActual, onBack })
       const tokenActual = await obtenerTokenActual();
 
       const payload = {
-        espacio_id: claseActual.espacio.id,
+        espacio_id: espacioId,
         descripcion: descripcion.trim(),
         gravedad: prioridad,
       };
+
+      console.log('PAYLOAD REPORTE:', payload);
 
       const response = await fetch(`${API_URL}/api/v1/reportes/`, {
         method: 'POST',
@@ -165,7 +255,11 @@ export default function ReportarIncidenciaScreen({ token, claseActual, onBack })
       const data = await leerRespuestaSegura(response, {});
 
       if (!response.ok) {
-        throw new Error(data?.detail || 'No se pudo generar el reporte.');
+        console.log('ERROR BACKEND REPORTE:', data);
+
+        const mensajeError = convertirErrorAtexto(data);
+
+        throw new Error(mensajeError || 'No se pudo generar el reporte.');
       }
 
       mostrarModal({
@@ -175,7 +269,10 @@ export default function ReportarIncidenciaScreen({ token, claseActual, onBack })
         accion: () => {
           setPrioridad('media');
           setDescripcion('');
-          onBack();
+
+          if (onBack) {
+            onBack();
+          }
         },
       });
     } catch (error) {
@@ -249,6 +346,12 @@ export default function ReportarIncidenciaScreen({ token, claseActual, onBack })
               <Text style={styles.contextSubtitle} numberOfLines={1}>
                 {aulaBloque} · {materia}
               </Text>
+
+              {!espacioId ? (
+                <Text style={styles.contextWarning} numberOfLines={2}>
+                  No se detectó el ID del aula.
+                </Text>
+              ) : null}
             </View>
           </View>
 
@@ -340,7 +443,12 @@ export default function ReportarIncidenciaScreen({ token, claseActual, onBack })
               multiline
               textAlignVertical="top"
               editable={!enviando}
+              maxLength={500}
             />
+
+            <Text style={styles.counterText}>
+              {descripcion.trim().length}/500 caracteres
+            </Text>
 
             <TouchableOpacity
               style={[styles.submitBtn, enviando && styles.disabledBtn]}
@@ -352,7 +460,14 @@ export default function ReportarIncidenciaScreen({ token, claseActual, onBack })
               {enviando ? (
                 <ActivityIndicator color={colors.white} />
               ) : (
-                <Text style={styles.submitBtnText}>Enviar reporte</Text>
+                <>
+                  <Text style={styles.submitBtnText}>Enviar reporte</Text>
+                  <Ionicons
+                    name="send-outline"
+                    size={17}
+                    color={colors.white}
+                  />
+                </>
               )}
             </TouchableOpacity>
           </View>
@@ -536,6 +651,13 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
+  contextWarning: {
+    fontSize: 11,
+    color: '#DC2626',
+    fontWeight: typography.weight.bold,
+    marginTop: 5,
+  },
+
   card: {
     backgroundColor: colors.white,
     borderRadius: radius.lg,
@@ -628,7 +750,15 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     color: colors.textPrimary,
     lineHeight: 20,
+  },
+
+  counterText: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    textAlign: 'right',
+    marginTop: 6,
     marginBottom: spacing.md,
+    fontWeight: typography.weight.semibold,
   },
 
   submitBtn: {
