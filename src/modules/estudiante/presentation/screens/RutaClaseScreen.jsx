@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 import * as Location from 'expo-location';
 
 import AppHeader from '../../../../shared/components/organisms/AppHeader';
@@ -21,8 +22,11 @@ import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
 
+const CLERK_JWT_TEMPLATE = 'Axis';
+
 export default function RutaClaseScreen() {
     const router = useRouter();
+    const { getToken } = useAuth();
     const { claseId } = useLocalSearchParams();
 
     const [loading, setLoading] = useState(true);
@@ -38,12 +42,26 @@ export default function RutaClaseScreen() {
         cargarDatos();
     }, []);
 
+    const obtenerTokenAxis = async () => {
+        const token = await getToken({
+            template: CLERK_JWT_TEMPLATE,
+            skipCache: true,
+        });
+
+        if (!token) {
+            throw new Error('No se pudo obtener una sesión activa.');
+        }
+
+        return token;
+    };
+
     const cargarDatos = async () => {
         try {
             setLoading(true);
             setError('');
 
-            const clasesRes = await obtenerMisClasesHoy();
+            const token = await obtenerTokenAxis();
+            const clasesRes = await obtenerMisClasesHoy({ token });
             const locationResult = await obtenerUbicacionActual();
 
             setClases(Array.isArray(clasesRes?.data) ? clasesRes.data : []);

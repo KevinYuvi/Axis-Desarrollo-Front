@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors } from '../../../../../shared/theme/colors';
@@ -8,55 +8,80 @@ import { spacing, radius } from '../../../../../shared/theme/spacing';
 
 const ESTADOS = {
   activa: {
-    label: 'Activa',
-    color: '#16A34A',
+    label: 'En curso',
+    color: '#15803D',
     bg: '#DCFCE7',
     line: '#22C55E',
     icon: 'radio-button-on-outline',
   },
   futura: {
-    label: 'Futura',
-    color: '#D97706',
+    label: 'Próxima',
+    color: '#B45309',
     bg: '#FEF3C7',
     line: '#F59E0B',
     icon: 'time-outline',
   },
   finalizada: {
     label: 'Finalizada',
-    color: '#6B7280',
-    bg: '#F3F4F6',
-    line: '#9CA3AF',
+    color: '#475569',
+    bg: '#F1F5F9',
+    line: '#94A3B8',
     icon: 'checkmark-done-outline',
   },
   liberada: {
     label: 'Liberada',
-    color: '#DC2626',
+    color: '#B91C1C',
     bg: '#FEE2E2',
     line: '#EF4444',
     icon: 'exit-outline',
   },
+  cancelada: {
+    label: 'Cancelada',
+    color: '#B91C1C',
+    bg: '#FEE2E2',
+    line: '#EF4444',
+    icon: 'close-circle-outline',
+  },
   sin_horario: {
-    label: 'Sin horario',
-    color: '#D97706',
+    label: 'Revisar',
+    color: '#B45309',
     bg: '#FEF3C7',
     line: '#F59E0B',
     icon: 'warning-outline',
   },
 };
 
-export default function ReservaCard({ item, estado }) {
+export default function ReservaCard({
+  item,
+  estado,
+  onLiberar,
+  liberando = false,
+}) {
   const reserva = item?.reserva || item;
   const espacio = item?.espacio || reserva?.espacio || {};
-  const config = ESTADOS[estado] || ESTADOS.sin_horario;
+  const estadoFinal = estado || obtenerEstadoReserva(reserva);
+  const config = ESTADOS[estadoFinal] || ESTADOS.sin_horario;
+
+  const puedeLiberar = estadoFinal === 'activa' || estadoFinal === 'futura';
 
   const aulaNombre =
-    espacio?.nombre || reserva?.espacio_nombre || 'Aula no registrada';
+    reserva?.espacio_nombre ||
+    reserva?.aula ||
+    espacio?.nombre ||
+    'Aula no registrada';
 
   const bloque =
-    espacio?.bloque || reserva?.espacio_bloque || 'Sin bloque';
+    reserva?.espacio_bloque ||
+    reserva?.bloque ||
+    espacio?.bloque ||
+    '';
 
   const ubicacion =
-    espacio?.ubicacion || espacio?.bloque || reserva?.espacio_bloque || '—';
+    reserva?.ubicacion ||
+    espacio?.ubicacion ||
+    espacio?.referencia ||
+    espacio?.direccion ||
+    '';
 
   return (
     <View style={styles.cardWrapper}>
@@ -65,7 +90,7 @@ export default function ReservaCard({ item, estado }) {
       <View style={styles.card}>
         <View style={styles.header}>
           <View style={styles.iconBox}>
-            <Ionicons name="calendar-outline" size={21} color={colors.primary} />
+            <Ionicons name="calendar-outline" size={22} color={colors.primary} />
           </View>
 
           <View style={styles.titleBox}>
@@ -73,91 +98,91 @@ export default function ReservaCard({ item, estado }) {
               {reserva?.materia || 'Reserva sin materia'}
             </Text>
 
-            <View style={styles.aulaRow}>
-              <Ionicons
-                name="business-outline"
-                size={13}
-                color={colors.textSecondary}
-              />
-
-              <Text style={styles.subtitle} numberOfLines={1}>
-                {aulaNombre}
-              </Text>
-            </View>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {aulaNombre}
+            </Text>
           </View>
 
-          <View style={[styles.statusBadge, { backgroundColor: config.bg }]}>
+          <View style={[styles.badge, { backgroundColor: config.bg }]}>
             <Ionicons name={config.icon} size={12} color={config.color} />
-
-            <Text style={[styles.statusText, { color: config.color }]}>
+            <Text style={[styles.badgeText, { color: config.color }]}>
               {config.label}
             </Text>
           </View>
         </View>
 
-        <View style={styles.infoRow}>
-          <InfoPill
-            icon="time-outline"
-            value={formatHorario(reserva?.hora_inicio, reserva?.hora_fin)}
-            label="Horario"
-          />
+        <View style={styles.mainInfo}>
+          <View style={styles.infoBox}>
+            <Ionicons name="time-outline" size={17} color={colors.primary} />
+            <View style={styles.infoTextBox}>
+              <Text style={styles.infoLabel}>Horario</Text>
+              <Text style={styles.infoValue} numberOfLines={1}>
+                {formatHorario(reserva?.hora_inicio, reserva?.hora_fin)}
+              </Text>
+            </View>
+          </View>
 
-          <InfoPill
-            icon="location-outline"
-            value={ubicacion}
-            label="Ubicación"
-          />
+          <View style={styles.infoBox}>
+            <Ionicons name="person-outline" size={17} color={colors.primary} />
+            <View style={styles.infoTextBox}>
+              <Text style={styles.infoLabel}>Docente</Text>
+              <Text style={styles.infoValue} numberOfLines={1}>
+                {reserva?.docente_nombre || 'No registrado'}
+              </Text>
+            </View>
+          </View>
         </View>
 
-        <View style={styles.metaSection}>
-          <MetaItem
-            icon="person-outline"
-            label="Docente"
-            value={reserva?.docente_nombre || 'Docente no registrado'}
-          />
+        <View style={styles.detailBox}>
+          <View style={styles.detailItem}>
+            <Ionicons name="layers-outline" size={15} color={colors.textSecondary} />
+            <Text style={styles.detailText} numberOfLines={1}>
+              {bloque || 'Bloque no registrado'}
+            </Text>
+          </View>
 
-          <MetaItem
-            icon="layers-outline"
-            label="Bloque"
-            value={bloque}
-          />
+          {!!ubicacion && ubicacion !== 'Ubicación no registrada' && (
+            <View style={styles.detailItem}>
+              <Ionicons
+                name="location-outline"
+                size={15}
+                color={colors.textSecondary}
+              />
+              <Text style={styles.detailText} numberOfLines={1}>
+                {ubicacion}
+              </Text>
+            </View>
+          )}
         </View>
+
+        {puedeLiberar && (
+          <TouchableOpacity
+            style={[styles.liberarBtn, liberando && styles.liberarBtnDisabled]}
+            onPress={() => onLiberar?.(reserva)}
+            disabled={liberando}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="exit-outline" size={17} color={colors.white} />
+            <Text style={styles.liberarText}>
+              {liberando ? 'Liberando...' : 'Liberar aula'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
 }
 
-function InfoPill({ icon, value, label }) {
-  return (
-    <View style={styles.infoPill}>
-      <View style={styles.infoIconBox}>
-        <Ionicons name={icon} size={16} color={colors.textSecondary} />
-      </View>
+function obtenerEstadoReserva(reserva) {
+  if (reserva?.estado === 'liberada' || reserva?.liberada_anticipadamente) {
+    return 'liberada';
+  }
 
-      <View style={styles.infoTextBox}>
-        <Text style={styles.infoValue} numberOfLines={1}>
-          {value}
-        </Text>
+  if (reserva?.estado === 'cancelada') {
+    return 'cancelada';
+  }
 
-        <Text style={styles.infoLabel}>{label}</Text>
-      </View>
-    </View>
-  );
-}
-
-function MetaItem({ icon, label, value }) {
-  return (
-    <View style={styles.metaItem}>
-      <Ionicons name={icon} size={15} color={colors.textSecondary} />
-
-      <View style={styles.metaTextBox}>
-        <Text style={styles.metaLabel}>{label}</Text>
-        <Text style={styles.metaValue} numberOfLines={1}>
-          {value}
-        </Text>
-      </View>
-    </View>
-  );
+  return reserva?.estado_tiempo || 'sin_horario';
 }
 
 function convertirFecha(fechaTexto) {
@@ -191,24 +216,23 @@ function formatHorario(isoInicio, isoFin) {
 const styles = StyleSheet.create({
   cardWrapper: {
     backgroundColor: colors.white,
-    borderRadius: 20,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     marginBottom: spacing.md,
     shadowColor: '#0F172A',
-    shadowOpacity: 0.05,
-    shadowRadius: 7,
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
     shadowOffset: {
       width: 0,
-      height: 3,
+      height: 4,
     },
-    elevation: 2,
+    elevation: 3,
+    overflow: 'hidden',
   },
 
   estadoLine: {
-    height: 3,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    height: 4,
   },
 
   card: {
@@ -218,14 +242,13 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.md,
   },
 
   iconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#F1F5F9',
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.sm,
@@ -242,21 +265,14 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
 
-  aulaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 3,
-  },
-
   subtitle: {
-    flex: 1,
+    marginTop: 3,
     fontSize: typography.size.xs,
     color: colors.textSecondary,
     fontWeight: typography.weight.semibold,
-    marginLeft: 3,
   },
 
-  statusBadge: {
+  badge: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.sm,
@@ -264,88 +280,90 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
 
-  statusText: {
+  badgeText: {
     fontSize: 10,
     fontWeight: typography.weight.bold,
     marginLeft: 4,
   },
 
-  infoRow: {
+  mainInfo: {
     flexDirection: 'row',
-    marginBottom: spacing.md,
+    gap: spacing.sm,
+    marginTop: spacing.md,
   },
 
-  infoPill: {
+  infoBox: {
     flex: 1,
     minHeight: 58,
-    backgroundColor: '#F8FAFC',
     borderRadius: radius.md,
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: '#E5E7EB',
     paddingHorizontal: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: spacing.sm,
-  },
-
-  infoIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#E5E7EB',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.sm,
   },
 
   infoTextBox: {
     flex: 1,
-  },
-
-  infoValue: {
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.bold,
-    color: colors.textPrimary,
+    marginLeft: spacing.xs,
   },
 
   infoLabel: {
     fontSize: 10,
     color: colors.textSecondary,
-    marginTop: 1,
-    fontWeight: typography.weight.semibold,
+    fontWeight: typography.weight.bold,
+    textTransform: 'uppercase',
   },
 
-  metaSection: {
+  infoValue: {
+    marginTop: 2,
+    fontSize: typography.size.xs,
+    color: colors.textPrimary,
+    fontWeight: typography.weight.bold,
+  },
+
+  detailBox: {
+    marginTop: spacing.sm,
+    borderRadius: radius.md,
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    borderRadius: radius.md,
     padding: spacing.sm,
   },
 
-  metaItem: {
+  detailItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 7,
+    marginBottom: 5,
   },
 
-  metaTextBox: {
+  detailText: {
     flex: 1,
-    marginLeft: spacing.sm,
-  },
-
-  metaLabel: {
-    fontSize: 10,
-    color: colors.textSecondary,
-    fontWeight: typography.weight.bold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-
-  metaValue: {
+    marginLeft: spacing.xs,
     fontSize: typography.size.xs,
-    color: colors.textPrimary,
+    color: colors.textSecondary,
     fontWeight: typography.weight.semibold,
-    marginTop: 1,
+  },
+
+  liberarBtn: {
+    marginTop: spacing.md,
+    minHeight: 42,
+    borderRadius: radius.md,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+
+  liberarBtnDisabled: {
+    opacity: 0.65,
+  },
+
+  liberarText: {
+    color: colors.white,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
+    marginLeft: spacing.xs,
   },
 });

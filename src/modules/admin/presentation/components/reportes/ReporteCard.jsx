@@ -56,9 +56,27 @@ const GRAVEDAD = {
   },
 };
 
-export default function ReporteCard({ reporte, onPressEstado }) {
+export default function ReporteCard({
+  reporte,
+  onPressEstado,
+  onPressDetalle,
+}) {
   const estado = ESTADOS[reporte?.estado] || ESTADOS.abierto;
   const gravedad = GRAVEDAD[reporte?.gravedad] || GRAVEDAD.media;
+  const imagenes = reporte?.imagenes || reporte?.adjuntos || [];
+  const tieneImagenes = Array.isArray(imagenes) && imagenes.length > 0;
+
+  const espacio =
+    reporte?.espacio_nombre ||
+    reporte?.aula ||
+    reporte?.espacio ||
+    'Aula no registrada';
+
+  const reportadoPor =
+    reporte?.estudiante_nombre ||
+    reporte?.docente_nombre ||
+    reporte?.usuario_nombre ||
+    'Usuario no registrado';
 
   return (
     <View style={styles.cardWrapper}>
@@ -79,17 +97,9 @@ export default function ReporteCard({ reporte, onPressEstado }) {
               {reporte?.codigo || 'Reporte'}
             </Text>
 
-            <View style={styles.dateRow}>
-              <Ionicons
-                name="calendar-outline"
-                size={13}
-                color={colors.textSecondary}
-              />
-
-              <Text style={styles.subtitle} numberOfLines={1}>
-                {formatearFecha(reporte?.fecha_reporte)}
-              </Text>
-            </View>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {formatearFecha(reporte?.fecha_reporte)}
+            </Text>
           </View>
 
           <TouchableOpacity
@@ -105,7 +115,7 @@ export default function ReporteCard({ reporte, onPressEstado }) {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.description} numberOfLines={3}>
+        <Text style={styles.description} numberOfLines={2}>
           {reporte?.descripcion || 'Sin descripción registrada.'}
         </Text>
 
@@ -120,31 +130,55 @@ export default function ReporteCard({ reporte, onPressEstado }) {
 
           <InfoPill
             icon="business-outline"
-            value={reporte?.espacio_nombre || 'Aula no registrada'}
+            value={espacio}
             label="Espacio"
           />
         </View>
 
-        <View style={styles.metaSection}>
-          <Ionicons
-            name="person-outline"
-            size={15}
-            color={colors.textSecondary}
-          />
+        <View style={styles.metaRow}>
+          <View style={styles.metaItem}>
+            <Ionicons
+              name="person-outline"
+              size={15}
+              color={colors.textSecondary}
+            />
 
-          <View style={styles.metaTextBox}>
-            <Text style={styles.metaLabel}>Docente</Text>
-            <Text style={styles.metaValue} numberOfLines={1}>
-              {reporte?.docente_nombre || 'Docente no registrado'}
+            <Text style={styles.metaText} numberOfLines={1}>
+              {reportadoPor}
             </Text>
           </View>
+
+          {tieneImagenes && (
+            <View style={styles.imageBadge}>
+              <Ionicons name="image-outline" size={14} color={colors.primary} />
+
+              <Text style={styles.imageBadgeText}>
+                {imagenes.length} imagen{imagenes.length === 1 ? '' : 'es'}
+              </Text>
+            </View>
+          )}
         </View>
+
+        <TouchableOpacity
+          style={styles.detailBtn}
+          onPress={onPressDetalle}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.detailText}>Ver detalle</Text>
+          <Ionicons name="chevron-forward" size={17} color={colors.primary} />
+        </TouchableOpacity>
       </View>
     </View>
   );
 }
 
-function InfoPill({ icon, value, label, color = colors.textSecondary, bg = '#F8FAFC' }) {
+function InfoPill({
+  icon,
+  value,
+  label,
+  color = colors.textSecondary,
+  bg = '#F8FAFC',
+}) {
   return (
     <View style={[styles.infoPill, { backgroundColor: bg }]}>
       <View style={styles.infoIconBox}>
@@ -194,12 +228,11 @@ const styles = StyleSheet.create({
       height: 3,
     },
     elevation: 2,
+    overflow: 'hidden',
   },
 
   estadoLine: {
-    height: 3,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    height: 4,
   },
 
   card: {
@@ -215,8 +248,8 @@ const styles = StyleSheet.create({
   iconBox: {
     width: 42,
     height: 42,
-    borderRadius: 21,
-    backgroundColor: '#F1F5F9',
+    borderRadius: 15,
+    backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.sm,
@@ -233,18 +266,11 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
 
-  dateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 3,
-  },
-
   subtitle: {
-    flex: 1,
     fontSize: typography.size.xs,
     color: colors.textSecondary,
     fontWeight: typography.weight.semibold,
-    marginLeft: 3,
+    marginTop: 3,
     textTransform: 'capitalize',
   },
 
@@ -271,25 +297,25 @@ const styles = StyleSheet.create({
 
   infoRow: {
     flexDirection: 'row',
-    marginBottom: spacing.md,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
 
   infoPill: {
     flex: 1,
-    minHeight: 58,
+    minHeight: 54,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     paddingHorizontal: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: spacing.sm,
   },
 
   infoIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
@@ -301,7 +327,7 @@ const styles = StyleSheet.create({
   },
 
   infoValue: {
-    fontSize: typography.size.sm,
+    fontSize: typography.size.xs,
     fontWeight: typography.weight.bold,
   },
 
@@ -312,33 +338,67 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
   },
 
-  metaSection: {
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+
+  metaItem: {
+    flex: 1,
+    minHeight: 34,
+    borderRadius: radius.md,
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    borderRadius: radius.md,
-    padding: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: spacing.sm,
+  },
+
+  metaText: {
+    flex: 1,
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    fontWeight: typography.weight.semibold,
+    marginLeft: spacing.xs,
+  },
+
+  imageBadge: {
+    minHeight: 34,
+    borderRadius: radius.full,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    paddingHorizontal: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
   },
 
-  metaTextBox: {
-    flex: 1,
-    marginLeft: spacing.sm,
-  },
-
-  metaLabel: {
+  imageBadgeText: {
     fontSize: 10,
-    color: colors.textSecondary,
+    color: colors.primary,
     fontWeight: typography.weight.bold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    marginLeft: 4,
   },
 
-  metaValue: {
-    fontSize: typography.size.xs,
-    color: colors.textPrimary,
-    fontWeight: typography.weight.semibold,
-    marginTop: 1,
+  detailBtn: {
+    minHeight: 42,
+    borderRadius: radius.md,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  detailText: {
+    fontSize: typography.size.sm,
+    color: colors.primary,
+    fontWeight: typography.weight.bold,
+    marginRight: 4,
   },
 });
