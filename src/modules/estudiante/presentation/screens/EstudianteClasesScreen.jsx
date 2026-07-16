@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 
 import AppHeader from '../../../../shared/components/organisms/AppHeader';
 import {
@@ -22,8 +23,11 @@ import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
 
+const CLERK_JWT_TEMPLATE = 'Axis';
+
 export default function EstudianteClasesScreen() {
   const router = useRouter();
+  const { getToken } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -31,19 +35,36 @@ export default function EstudianteClasesScreen() {
   const [clasesHoy, setClasesHoy] = useState([]);
   const [error, setError] = useState('');
 
+  const obtenerTokenAxis = async () => {
+    const token = await getToken({
+      template: CLERK_JWT_TEMPLATE,
+      skipCache: true,
+    });
+
+    if (!token) {
+      throw new Error('No se pudo obtener una sesión activa.');
+    }
+
+    return token;
+  };
+
   const cargarDatos = async ({ silencioso = false } = {}) => {
     try {
       if (!silencioso) setLoading(true);
 
       setError('');
 
+      const token = await obtenerTokenAxis();
+
       const [proximaRes, clasesRes] = await Promise.all([
-        obtenerProximaClase(),
-        obtenerMisClasesHoy(),
+        obtenerProximaClase({ token }),
+        obtenerMisClasesHoy({ token }),
       ]);
 
+      const clases = Array.isArray(clasesRes?.data) ? clasesRes.data : [];
+
       setProximaClase(proximaRes?.data || null);
-      setClasesHoy(Array.isArray(clasesRes?.data) ? clasesRes.data : []);
+      setClasesHoy(clases);
     } catch (err) {
       setError(err?.message || 'No se pudieron cargar las clases.');
     } finally {
@@ -63,68 +84,138 @@ export default function EstudianteClasesScreen() {
     cargarDatos({ silencioso: true });
   };
 
-  const irRutaClase = (clase) => {
+  const clasePrincipal = useMemo(() => {
+    const claseActual = clasesHoy.find((item) => item.estado === 'actual');
+
+    if (claseActual) {
+      return claseActual;
+    }
+
+    if (proximaClase && proximaClase.estado !== 'finalizada') {
+      return proximaClase;
+    }
+
+    return clasesHoy.find((item) => item.estado === 'proxima') || null;
+  }, [clasesHoy, proximaClase]);
+
+  const clasesPendientes = useMemo(() => {
+    return clasesHoy
+      .filter((clase) => {
+        if (!clase) return false;
+
+        if (clase.estado === 'finalizada') {
+          return false;
+        }
+
+        if (clasePrincipal?.id && clase.id === clasePrincipal.id) {
+          return false;
+        }
+
+        return clase.estado === 'actual' || clase.estado === 'proxima';
+      })
+      .sort((a, b) => convertirHoraAMinutos(a.hora_inicio) - convertirHoraAMinutos(b.hora_inicio));
+  }, [clasesHoy, clasePrincipal]);
+
+  const totalVigentes = clasePrincipal ? clasesPendientes.length + 1 : clasesPendientes.length;
+
+  const irDetalleClase = (clase) => {
     if (!clase?.id) return;
 
-    router.push(`/(estudiante)/ruta-clase/${clase.id}`);
+    router.push(`/(estudiante)/clase/${clase.id}`);
   };
 
-  const renderProximaClase = () => {
-    if (!proximaClase) {
+  const renderClasePrincipal = () => {
+    if (!clasePrincipal) {
       return (
         <View style={styles.emptyCard}>
           <Ionicons name="calendar-outline" size={34} color={colors.textMuted} />
 
-          <Text style={styles.emptyTitle}>Sin próxima clase</Text>
+          <Text style={styles.emptyTitle}>Sin clases pendientes</Text>
 
           <Text style={styles.emptyText}>
-            No tienes clases pendientes registradas para hoy.
+            No tienes clases activas o próximas para hoy.
           </Text>
         </View>
       );
     }
 
+    const esActual = clasePrincipal.estado === 'actual';
+
     return (
-      <View style={styles.heroCard}>
+      <TouchableOpacity
+        style={[styles.heroCard, esActual && styles.heroCardActual]}
+        onPress={() => irDetalleClase(clasePrincipal)}
+        activeOpacity={0.88}
+      >
         <View style={styles.heroTop}>
-          <View style={styles.heroIcon}>
-            <Ionicons name="school-outline" size={24} color={colors.primary} />
+          <View style={[styles.heroIcon, esActual && styles.heroIconActual]}>
+            <Ionicons
+              name={esActual ? 'radio-button-on-outline' : 'school-outline'}
+              size={24}
+              color={esActual ? colors.white : colors.primary}
+            />
           </View>
 
           <View style={styles.heroTextBox}>
-            <Text style={styles.heroLabel}>Próxima clase</Text>
-            <Text style={styles.heroTitle}>{proximaClase.materia}</Text>
+            <View style={styles.heroLabelRow}>
+              <View
+                style={[
+                  styles.statusDot,
+                  esActual ? styles.statusDotActual : styles.statusDotProxima,
+                ]}
+              />
+
+              <Text style={styles.heroLabel}>
+                {esActual ? 'Clase actual' : 'Próxima clase'}
+              </Text>
+            </View>
+
+            <Text style={styles.heroTitle} numberOfLines={2}>
+              {clasePrincipal.materia}
+            </Text>
           </View>
+
+          <Ionicons name="chevron-forward" size={21} color={colors.textMuted} />
         </View>
 
         <View style={styles.detailBox}>
           <InfoRow
             icon="time-outline"
-            text={`${proximaClase.hora_inicio} - ${proximaClase.hora_fin}`}
+            text={`${clasePrincipal.hora_inicio} - ${clasePrincipal.hora_fin}`}
           />
 
-          <InfoRow icon="person-outline" text={proximaClase.docente} />
+          <InfoRow
+            icon="person-outline"
+            text={clasePrincipal.docente || 'Docente no registrado'}
+          />
 
           <InfoRow
             icon="business-outline"
-            text={`${proximaClase.aula} · ${proximaClase.edificio?.nombre}`}
+            text={`${clasePrincipal.aula || 'Aula no registrada'} · ${
+              clasePrincipal.edificio?.nombre || 'Edificio no registrado'
+            }`}
           />
 
           <InfoRow
             icon="location-outline"
-            text={proximaClase.edificio?.referencia || 'Sin referencia'}
+            text={clasePrincipal.edificio?.referencia || 'Sin referencia'}
           />
         </View>
 
-        <TouchableOpacity
-          style={styles.routeButton}
-          onPress={() => irRutaClase(proximaClase)}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="navigate-outline" size={18} color={colors.white} />
-          <Text style={styles.routeButtonText}>Cómo llegar</Text>
-        </TouchableOpacity>
-      </View>
+        <View style={styles.openDetailBtn}>
+          <Ionicons
+            name={esActual ? 'warning-outline' : 'map-outline'}
+            size={17}
+            color={colors.primary}
+          />
+
+          <Text style={styles.openDetailText}>
+            {esActual
+              ? 'Ver aula, ruta y reportar'
+              : 'Ver detalle del aula y ruta'}
+          </Text>
+        </View>
+      </TouchableOpacity>
     );
   };
 
@@ -132,14 +223,21 @@ export default function EstudianteClasesScreen() {
     const estadoConfig = obtenerEstadoConfig(clase.estado);
 
     return (
-      <View key={clase.id} style={styles.classCard}>
+      <TouchableOpacity
+        key={clase.id}
+        style={styles.classCard}
+        onPress={() => irDetalleClase(clase)}
+        activeOpacity={0.88}
+      >
         <View style={styles.classHeader}>
           <View style={styles.classIcon}>
             <Ionicons name="book-outline" size={20} color={colors.primary} />
           </View>
 
           <View style={styles.classTitleBox}>
-            <Text style={styles.classTitle}>{clase.materia}</Text>
+            <Text style={styles.classTitle} numberOfLines={1}>
+              {clase.materia}
+            </Text>
 
             <Text style={styles.classSubtitle}>
               {clase.hora_inicio} - {clase.hora_fin}
@@ -156,24 +254,29 @@ export default function EstudianteClasesScreen() {
         <View style={styles.classInfo}>
           <InfoRow
             icon="business-outline"
-            text={`${clase.aula} · ${clase.edificio?.nombre}`}
+            text={`${clase.aula || 'Aula no registrada'} · ${
+              clase.edificio?.nombre || 'Edificio'
+            }`}
           />
 
           <InfoRow
             icon="layers-outline"
-            text={clase.edificio?.bloque || 'Sin bloque'}
+            text={formatearBloque(clase.edificio?.bloque)}
           />
         </View>
 
-        <TouchableOpacity
-          style={styles.secondaryRouteButton}
-          onPress={() => irRutaClase(clase)}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="map-outline" size={16} color={colors.primary} />
-          <Text style={styles.secondaryRouteButtonText}>Ver ruta</Text>
-        </TouchableOpacity>
-      </View>
+        <View style={styles.classActionsRow}>
+          <View style={styles.actionPill}>
+            <Ionicons name="map-outline" size={16} color={colors.primary} />
+            <Text style={styles.actionPillText}>Ruta</Text>
+          </View>
+
+          <View style={styles.actionPill}>
+            <Ionicons name="eye-outline" size={16} color={colors.primary} />
+            <Text style={styles.actionPillText}>Detalle</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
     );
   };
 
@@ -181,7 +284,11 @@ export default function EstudianteClasesScreen() {
     <SafeAreaView style={styles.screen} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
 
-      <AppHeader rol="estudiante" />
+      <AppHeader
+        rol="estudiante"
+        onNotifPress={refrescar}
+        onProfilePress={() => router.push('/(estudiante)/perfil')}
+      />
 
       <View style={styles.pageHeader}>
         <View style={styles.pageIcon}>
@@ -191,7 +298,7 @@ export default function EstudianteClasesScreen() {
         <View style={styles.pageTextBox}>
           <Text style={styles.pageTitle}>Mis clases</Text>
           <Text style={styles.pageSubtitle}>
-            Consulta tu horario y ruta al edificio.
+            Aula, ruta y reportes de tu horario.
           </Text>
         </View>
       </View>
@@ -212,32 +319,57 @@ export default function EstudianteClasesScreen() {
         ) : error ? (
           <View style={styles.emptyCard}>
             <Ionicons name="alert-circle-outline" size={34} color="#DC2626" />
+
             <Text style={styles.emptyTitle}>No se pudo cargar</Text>
+
             <Text style={styles.emptyText}>{error}</Text>
           </View>
         ) : (
           <>
-            {renderProximaClase()}
+            <View style={styles.sectionIntro}>
+              <View>
+                <Text style={styles.sectionTitle}>Ahora</Text>
+                <Text style={styles.sectionSubtitle}>
+                  Clase activa o siguiente clase pendiente.
+                </Text>
+              </View>
 
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Clases de hoy</Text>
-              <Text style={styles.sectionCount}>{clasesHoy.length}</Text>
+              <View style={styles.countPill}>
+                <Text style={styles.countPillText}>
+                  {totalVigentes} pendiente{totalVigentes === 1 ? '' : 's'}
+                </Text>
+              </View>
             </View>
 
-            {clasesHoy.length > 0 ? (
-              clasesHoy.map(renderClase)
+            {renderClasePrincipal()}
+
+            <View style={styles.sectionHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>Cronograma pendiente</Text>
+                <Text style={styles.sectionSubtitle}>
+                  Solo se muestran clases que aún no han pasado.
+                </Text>
+              </View>
+
+              <Text style={styles.sectionCount}>{clasesPendientes.length}</Text>
+            </View>
+
+            {clasesPendientes.length > 0 ? (
+              clasesPendientes.map(renderClase)
             ) : (
-              <View style={styles.emptyCard}>
+              <View style={styles.emptyCardSmall}>
                 <Ionicons
-                  name="calendar-clear-outline"
-                  size={34}
+                  name="checkmark-done-outline"
+                  size={28}
                   color={colors.textMuted}
                 />
 
-                <Text style={styles.emptyTitle}>Sin clases hoy</Text>
+                <Text style={styles.emptyTitleSmall}>
+                  No hay más clases pendientes
+                </Text>
 
                 <Text style={styles.emptyText}>
-                  No tienes horarios registrados para este día.
+                  Las clases finalizadas no se muestran en este listado.
                 </Text>
               </View>
             )}
@@ -282,6 +414,31 @@ function obtenerEstadoConfig(estado) {
     bg: '#EFF6FF',
     color: colors.primary,
   };
+}
+
+function convertirHoraAMinutos(horaTexto) {
+  if (!horaTexto) return 99999;
+
+  const partes = String(horaTexto).split(':');
+  const hora = Number(partes[0] || 0);
+  const minuto = Number(partes[1] || 0);
+
+  if (Number.isNaN(hora) || Number.isNaN(minuto)) {
+    return 99999;
+  }
+
+  return hora * 60 + minuto;
+}
+
+function formatearBloque(valor) {
+  if (!valor) return 'Sin bloque';
+
+  return String(valor)
+    .replace(/_/g, ' ')
+    .replace(/-/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (letra) => letra.toUpperCase());
 }
 
 const styles = StyleSheet.create({
@@ -336,6 +493,47 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl,
   },
 
+  sectionIntro: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+
+  sectionTitle: {
+    fontSize: typography.size.md,
+    color: colors.textPrimary,
+    fontWeight: typography.weight.bold,
+  },
+
+  sectionSubtitle: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
+    maxWidth: 250,
+  },
+
+  countPill: {
+    borderRadius: radius.full,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+  },
+
+  countPillText: {
+    fontSize: 10,
+    color: colors.primary,
+    fontWeight: typography.weight.bold,
+  },
+
   heroCard: {
     backgroundColor: colors.white,
     borderRadius: radius.lg,
@@ -343,6 +541,11 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.md,
     marginBottom: spacing.lg,
+  },
+
+  heroCardActual: {
+    borderColor: '#22C55E',
+    borderWidth: 1.5,
   },
 
   heroTop: {
@@ -354,15 +557,40 @@ const styles = StyleSheet.create({
   heroIcon: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: 18,
     backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.sm,
   },
 
+  heroIconActual: {
+    backgroundColor: '#16A34A',
+  },
+
   heroTextBox: {
     flex: 1,
+  },
+
+  heroLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 3,
+  },
+
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+
+  statusDotActual: {
+    backgroundColor: '#16A34A',
+  },
+
+  statusDotProxima: {
+    backgroundColor: colors.primary,
   },
 
   heroLabel: {
@@ -404,32 +632,21 @@ const styles = StyleSheet.create({
     fontWeight: typography.weight.semibold,
   },
 
-  routeButton: {
-    minHeight: 46,
+  openDetailBtn: {
+    minHeight: 42,
     borderRadius: radius.md,
-    backgroundColor: colors.primary,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 8,
+    gap: 7,
   },
 
-  routeButtonText: {
-    color: colors.white,
+  openDetailText: {
+    color: colors.primary,
     fontSize: typography.size.sm,
-    fontWeight: typography.weight.bold,
-  },
-
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-  },
-
-  sectionTitle: {
-    fontSize: typography.size.md,
-    color: colors.textPrimary,
     fontWeight: typography.weight.bold,
   },
 
@@ -457,7 +674,7 @@ const styles = StyleSheet.create({
   classIcon: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: 16,
     backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -500,21 +717,27 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
 
-  secondaryRouteButton: {
-    minHeight: 40,
-    borderRadius: radius.md,
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    alignItems: 'center',
-    justifyContent: 'center',
+  classActionsRow: {
     flexDirection: 'row',
-    gap: 7,
+    gap: spacing.sm,
   },
 
-  secondaryRouteButtonText: {
+  actionPill: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: radius.md,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+
+  actionPillText: {
+    fontSize: typography.size.xs,
     color: colors.primary,
-    fontSize: typography.size.sm,
     fontWeight: typography.weight.bold,
   },
 
@@ -527,33 +750,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
+  emptyCardSmall: {
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+
   emptyTitle: {
     fontSize: typography.size.md,
     color: colors.textPrimary,
     fontWeight: typography.weight.bold,
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
+  },
+
+  emptyTitleSmall: {
+    fontSize: typography.size.sm,
+    color: colors.textPrimary,
+    fontWeight: typography.weight.bold,
+    marginTop: spacing.sm,
   },
 
   emptyText: {
     fontSize: typography.size.sm,
     color: colors.textSecondary,
     textAlign: 'center',
+    marginTop: 6,
     lineHeight: 20,
-    marginTop: spacing.xs,
   },
 
   loadingBox: {
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.xl,
+    minHeight: 280,
     alignItems: 'center',
+    justifyContent: 'center',
   },
 
   loadingText: {
     marginTop: spacing.sm,
-    color: colors.textSecondary,
     fontSize: typography.size.sm,
+    color: colors.textSecondary,
   },
 });

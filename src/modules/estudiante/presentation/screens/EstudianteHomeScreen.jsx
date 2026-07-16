@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 
 import AppHeader from '../../../../shared/components/organisms/AppHeader';
 import {
@@ -23,50 +24,70 @@ import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
 
+const CLERK_JWT_TEMPLATE = 'Axis';
+
 export default function EstudianteHomeScreen() {
   const router = useRouter();
+  const { getToken } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [clasesHoy, setClasesHoy] = useState([]);
-  const [clasePrincipal, setClasePrincipal] = useState(null);
-  const [mejorEspacio, setMejorEspacio] = useState(null);
-  const [resumenEstudio, setResumenEstudio] = useState({
-    espacios: 0,
-    puestosLibres: 0,
-    computadoras: 0,
-  });
+  const [claseActual, setClaseActual] = useState(null);
+  const [proximaClase, setProximaClase] = useState(null);
+  const [biblioteca, setBiblioteca] = useState(null);
   const [error, setError] = useState('');
 
-  const fechaTexto = useMemo(() => {
-    const fecha = new Date();
-
-    return fecha.toLocaleDateString('es-EC', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
+  const obtenerTokenAxis = async () => {
+    const token = await getToken({
+      template: CLERK_JWT_TEMPLATE,
+      skipCache: true,
     });
-  }, []);
+
+    if (!token) {
+      throw new Error('No se pudo obtener una sesión activa.');
+    }
+
+    return token;
+  };
 
   const cargarDatos = async ({ silencioso = false } = {}) => {
     try {
-      if (!silencioso) setLoading(true);
+      if (!silencioso) {
+        setLoading(true);
+      }
 
       setError('');
 
-      const [clasesRes, proximaRes, ocupacionRes] = await Promise.all([
-        obtenerMisClasesHoy(),
-        obtenerProximaClase(),
+      const token = await obtenerTokenAxis();
+
+      const [clasesRes, proximaRes, ocupacionRes] = await Promise.allSettled([
+        obtenerMisClasesHoy({ token }),
+        obtenerProximaClase({ token }),
         getOccupancySpaces(),
       ]);
 
-      const clases = Array.isArray(clasesRes?.data) ? clasesRes.data : [];
-      const claseActual = clases.find((item) => item.estado === 'actual');
+      const clases =
+        clasesRes.status === 'fulfilled' && Array.isArray(clasesRes.value?.data)
+          ? clasesRes.value.data
+          : [];
 
-      setClasesHoy(clases);
-      setClasePrincipal(claseActual || proximaRes?.data || null);
+      const proxima =
+        proximaRes.status === 'fulfilled'
+          ? proximaRes.value?.data || null
+          : null;
 
-      const espacios = Array.isArray(ocupacionRes?.data) ? ocupacionRes.data : [];
+      const espacios =
+        ocupacionRes.status === 'fulfilled' && Array.isArray(ocupacionRes.value?.data)
+          ? ocupacionRes.value.data
+          : [];
+
+      const actual = clases.find((item) => item.estado === 'actual') || null;
+
+      const siguiente =
+        proxima?.estado === 'actual'
+          ? null
+          : proxima || clases.find((item) => item.estado === 'proxima') || null;
 
       const espaciosConDatos = espacios.filter(
         (item) =>
@@ -74,32 +95,30 @@ export default function EstudianteHomeScreen() {
           item.occupancyPercent !== undefined
       );
 
-      const candidatos = espaciosConDatos.filter(
-        (item) => item.status !== 'Ocupado' && item.status !== 'Sin datos'
-      );
+      const bibliotecas = espaciosConDatos.filter((item) => {
+        const texto = `${item.name || ''} ${item.nombre || ''} ${
+          item.type || ''
+        } ${item.tipo || ''}`.toLowerCase();
 
-      candidatos.sort((a, b) => {
-        if (a.occupancyPercent !== b.occupancyPercent) {
-          return a.occupancyPercent - b.occupancyPercent;
-        }
-
-        return (a.distanceMinutes || 999) - (b.distanceMinutes || 999);
+        return texto.includes('biblioteca');
       });
 
-      setMejorEspacio(candidatos[0] || null);
+      const candidatos = (bibliotecas.length > 0 ? bibliotecas : espaciosConDatos)
+        .filter((item) => item.status !== 'Ocupado' && item.status !== 'Sin datos')
+        .sort((a, b) => {
+          if (a.occupancyPercent !== b.occupancyPercent) {
+            return a.occupancyPercent - b.occupancyPercent;
+          }
 
-      setResumenEstudio({
-        espacios: espaciosConDatos.length,
-        puestosLibres: espaciosConDatos.reduce(
-          (sum, item) => sum + (item.freeSeats || 0),
-          0
-        ),
-        computadoras: espaciosConDatos.reduce(
-          (sum, item) => sum + (item.computersAvailable || 0),
-          0
-        ),
-      });
+          return (a.distanceMinutes || 999) - (b.distanceMinutes || 999);
+        });
+
+      setClasesHoy(clases);
+      setClaseActual(actual);
+      setProximaClase(siguiente);
+      setBiblioteca(candidatos[0] || null);
     } catch (err) {
+      console.error('Error cargando home estudiante:', err);
       setError(err?.message || 'No se pudo cargar el inicio.');
     } finally {
       setLoading(false);
@@ -118,204 +137,30 @@ export default function EstudianteHomeScreen() {
     cargarDatos({ silencioso: true });
   };
 
-  const irRutaClase = () => {
-    if (!clasePrincipal?.id) return;
+  const irDetalleClase = (clase) => {
+    if (!clase?.id) return;
 
-    router.push(`/(estudiante)/ruta-clase/${clasePrincipal.id}`);
+    router.push({
+      pathname: '/(estudiante)/clase/[claseId]',
+      params: {
+        claseId: clase.id,
+      },
+    });
   };
 
   const irBibliotecas = () => {
     router.push('/(estudiante)/bibliotecas');
   };
 
-  const renderEstadoDia = () => {
-    const totalClases = clasesHoy.length;
-    const clasesPendientes = clasesHoy.filter(
-      (item) => item.estado === 'actual' || item.estado === 'proxima'
-    ).length;
-
-    return (
-      <View style={styles.todayCard}>
-        <View>
-          <Text style={styles.todayLabel}>Hoy</Text>
-          <Text style={styles.todayDate}>{capitalizar(fechaTexto)}</Text>
-        </View>
-        
-        <View style={styles.todayLine} />
-
-        <Text style={styles.todayMessage}>
-          {totalClases > 0
-            ? `Tienes ${totalClases} ${totalClases === 1 ? 'clase registrada' : 'clases registradas'} para hoy.`
-            : 'No tienes clases registradas para hoy.'}
-        </Text>
-      </View>
-    );
-  };
-
-  const renderClasePrincipal = () => {
-    if (!clasePrincipal) {
-      return (
-        <View style={styles.classHeroEmpty}>
-          <View style={styles.emptyIconBox}>
-            <Ionicons name="calendar-clear-outline" size={26} color={colors.primary} />
-          </View>
-
-          <Text style={styles.emptyMainTitle}>Sin clase próxima</Text>
-
-          <Text style={styles.emptyMainText}>
-            Cuando tengas una clase registrada, aquí aparecerá el aula, edificio y la ruta.
-          </Text>
-        </View>
-      );
-    }
-
-    const esActual = clasePrincipal.estado === 'actual';
-
-    return (
-      <View style={styles.classHero}>
-        <View style={styles.classHeroTop}>
-          <View style={styles.liveBox}>
-            <View style={[styles.liveDot, esActual ? styles.liveDotActive : styles.liveDotNext]} />
-            <Text style={styles.liveText}>
-              {esActual ? 'Clase en curso' : 'Tu próxima clase'}
-            </Text>
-          </View>
-
-          <Text style={styles.classTime}>
-            {clasePrincipal.hora_inicio} - {clasePrincipal.hora_fin}
-          </Text>
-        </View>
-
-        <Text style={styles.classTitle}>{clasePrincipal.materia}</Text>
-
-        <View style={styles.locationPanel}>
-          <View style={styles.locationIcon}>
-            <Ionicons name="business-outline" size={21} color={colors.primary} />
-          </View>
-
-          <View style={styles.locationTextBox}>
-            <Text style={styles.locationBuilding}>
-              {clasePrincipal.edificio?.nombre}
-            </Text>
-
-            <Text style={styles.locationRoom}>
-              {clasePrincipal.aula} · {clasePrincipal.edificio?.bloque}
-            </Text>
-
-            <Text style={styles.locationReference} numberOfLines={2}>
-              {clasePrincipal.edificio?.referencia || 'Sin referencia registrada'}
-            </Text>
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={styles.routeButton}
-          onPress={irRutaClase}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="navigate-outline" size={18} color={colors.white} />
-          <Text style={styles.routeButtonText}>Ver ruta al edificio</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
-  const renderMejorEspacio = () => {
-    if (!mejorEspacio) {
-      return (
-        <View style={styles.studyCard}>
-          <View style={styles.sectionHead}>
-            <Text style={styles.sectionTitle}>Dónde estudiar</Text>
-            <Ionicons name="sparkles-outline" size={18} color={colors.primary} />
-          </View>
-
-          <View style={styles.noStudyBox}>
-            <Text style={styles.noStudyTitle}>Sin recomendación disponible</Text>
-            <Text style={styles.noStudyText}>
-              Aún no hay datos suficientes de ocupación para sugerir un espacio.
-            </Text>
-          </View>
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.studyCard}>
-        <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>Dónde estudiar ahora</Text>
-          <Ionicons name="sparkles-outline" size={18} color={colors.primary} />
-        </View>
-
-        <TouchableOpacity
-          style={styles.studyRecommendation}
-          onPress={irBibliotecas}
-          activeOpacity={0.9}
-        >
-          <View style={styles.studyTop}>
-            <View style={styles.studyIcon}>
-              <Ionicons name="library-outline" size={22} color={colors.primary} />
-            </View>
-
-            <View style={styles.studyNameBox}>
-              <Text style={styles.studyName}>{mejorEspacio.name}</Text>
-              <Text style={styles.studyReason}>
-                Menor ocupación disponible para estudiar.
-              </Text>
-            </View>
-
-            <Ionicons name="chevron-forward" size={19} color={colors.textMuted} />
-          </View>
-
-          <View style={styles.studyStats}>
-            <MiniStat
-              label="Ocupación"
-              value={`${mejorEspacio.occupancyPercent}%`}
-            />
-
-            <MiniStat
-              label="Puestos"
-              value={mejorEspacio.freeSeats}
-            />
-
-            <MiniStat
-              label="Computadoras"
-              value={mejorEspacio.computersAvailable}
-            />
-          </View>
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
-  const renderResumenCampus = () => {
-    return (
-      <View style={styles.summaryRow}>
-        <SummaryPill
-          icon="book-outline"
-          value={clasesHoy.length}
-          label="Clases hoy"
-        />
-
-        <SummaryPill
-          icon="reader-outline"
-          value={resumenEstudio.puestosLibres}
-          label="Puestos libres"
-        />
-
-        <SummaryPill
-          icon="desktop-outline"
-          value={resumenEstudio.computadoras}
-          label="PC libres"
-        />
-      </View>
-    );
-  };
-
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
 
-      <AppHeader rol="estudiante" />
+      <AppHeader
+        rol="estudiante"
+        onNotifPress={refrescar}
+        onProfilePress={() => router.push('/(estudiante)/perfil')}
+      />
 
       <ScrollView
         style={styles.scroll}
@@ -326,22 +171,86 @@ export default function EstudianteHomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         {loading ? (
-          <View style={styles.loadingCard}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>Preparando tu día...</Text>
-          </View>
+          <LoadingState />
         ) : error ? (
-          <View style={styles.errorCard}>
-            <Ionicons name="alert-circle-outline" size={34} color="#DC2626" />
-            <Text style={styles.errorTitle}>No se pudo cargar</Text>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
+          <ErrorState mensaje={error} onRetry={refrescar} />
         ) : (
           <>
-            {renderEstadoDia()}
-            {renderClasePrincipal()}
-            {renderMejorEspacio()}
-            {renderResumenCampus()}
+            <View style={styles.headerCard}>
+              <View style={styles.headerTextBox}>
+                <Text style={styles.headerTitle}>Tu actividad de hoy</Text>
+                <Text style={styles.headerSubtitle}>
+                  {clasesHoy.length > 0
+                    ? `${clasesHoy.length} ${
+                        clasesHoy.length === 1 ? 'clase registrada' : 'clases registradas'
+                      } para hoy.`
+                    : 'No tienes clases registradas para hoy.'}
+                </Text>
+              </View>
+
+              <View style={styles.dateChip}>
+                <Ionicons
+                  name="calendar-clear-outline"
+                  size={15}
+                  color={colors.primary}
+                />
+                <Text style={styles.dateChipText}>{formatearFechaCorta()}</Text>
+              </View>
+            </View>
+
+            <SectionTitle
+              icon="radio-button-on-outline"
+              title="Clase actual"
+              subtitle="Aula donde deberías estar ahora"
+            />
+
+            {claseActual ? (
+              <ClaseActualCard
+                clase={claseActual}
+                onPress={() => irDetalleClase(claseActual)}
+              />
+            ) : (
+              <EmptyCard
+                icon="school-outline"
+                title="Sin clase activa"
+                text="Cuando estés dentro del horario de una materia, aparecerá aquí tu aula actual."
+              />
+            )}
+
+            <SectionTitle
+              icon="time-outline"
+              title="Próxima clase"
+              subtitle="Tu siguiente materia programada"
+            />
+
+            {proximaClase ? (
+              <ProximaClaseCard
+                clase={proximaClase}
+                onPress={() => irDetalleClase(proximaClase)}
+              />
+            ) : (
+              <EmptyCard
+                icon="calendar-outline"
+                title="Sin próximas clases"
+                text="No tienes otra clase pendiente para hoy."
+              />
+            )}
+
+            <SectionTitle
+              icon="library-outline"
+              title="Biblioteca"
+              subtitle="Espacio sugerido para estudiar"
+            />
+
+            {biblioteca ? (
+              <BibliotecaCard espacio={biblioteca} onPress={irBibliotecas} />
+            ) : (
+              <EmptyCard
+                icon="library-outline"
+                title="Sin información disponible"
+                text="Aún no hay datos de ocupación de la biblioteca."
+              />
+            )}
           </>
         )}
       </ScrollView>
@@ -349,28 +258,264 @@ export default function EstudianteHomeScreen() {
   );
 }
 
-function MiniStat({ label, value }) {
+function SectionTitle({ icon, title, subtitle }) {
   return (
-    <View style={styles.miniStat}>
-      <Text style={styles.miniValue}>{value}</Text>
-      <Text style={styles.miniLabel}>{label}</Text>
+    <View style={styles.sectionTitleRow}>
+      <View style={styles.sectionIcon}>
+        <Ionicons name={icon} size={17} color={colors.primary} />
+      </View>
+
+      <View style={styles.sectionTextBox}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        <Text style={styles.sectionSubtitle}>{subtitle}</Text>
+      </View>
     </View>
   );
 }
 
-function SummaryPill({ icon, value, label }) {
+function ClaseActualCard({ clase, onPress }) {
   return (
-    <View style={styles.summaryPill}>
-      <Ionicons name={icon} size={17} color={colors.primary} />
-      <Text style={styles.summaryValue}>{value}</Text>
-      <Text style={styles.summaryLabel}>{label}</Text>
+    <TouchableOpacity
+      style={styles.actualCard}
+      onPress={onPress}
+      activeOpacity={0.86}
+    >
+      <View style={styles.cardTop}>
+        <View style={styles.actualIcon}>
+          <Ionicons name="school-outline" size={22} color={colors.white} />
+        </View>
+
+        <View style={styles.cardTextBox}>
+          <Text style={styles.cardTitle} numberOfLines={1}>
+            {clase?.materia || 'Clase actual'}
+          </Text>
+
+          <Text style={styles.cardSubtitle} numberOfLines={1}>
+            {clase?.aula || 'Aula no registrada'}
+          </Text>
+        </View>
+
+        <View style={styles.activeBadge}>
+          <Text style={styles.activeBadgeText}>En curso</Text>
+        </View>
+      </View>
+
+      <View style={styles.cardInfoRow}>
+        <InfoItem
+          icon="time-outline"
+          label="Horario"
+          value={formatHorario(clase?.hora_inicio, clase?.hora_fin)}
+        />
+
+        <InfoItem
+          icon="business-outline"
+          label="Edificio"
+          value={clase?.edificio?.nombre || 'No registrado'}
+        />
+      </View>
+
+      <View style={styles.actionBar}>
+        <Text style={styles.actionText}>Ver aula, ruta y reporte</Text>
+        <Ionicons name="chevron-forward" size={17} color={colors.primary} />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function ProximaClaseCard({ clase, onPress }) {
+  return (
+    <TouchableOpacity
+      style={styles.normalCard}
+      onPress={onPress}
+      activeOpacity={0.86}
+    >
+      <View style={styles.cardTop}>
+        <View style={styles.softIcon}>
+          <Ionicons name="calendar-outline" size={21} color={colors.primary} />
+        </View>
+
+        <View style={styles.cardTextBox}>
+          <Text style={styles.normalTitle} numberOfLines={1}>
+            {clase?.materia || 'Próxima clase'}
+          </Text>
+
+          <Text style={styles.normalSubtitle} numberOfLines={1}>
+            {clase?.aula || 'Aula no registrada'}
+          </Text>
+        </View>
+
+        <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+      </View>
+
+      <View style={styles.cardInfoRow}>
+        <InfoItem
+          icon="time-outline"
+          label="Horario"
+          value={formatHorario(clase?.hora_inicio, clase?.hora_fin)}
+        />
+
+        <InfoItem
+          icon="person-outline"
+          label="Docente"
+          value={clase?.docente || 'No registrado'}
+        />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function BibliotecaCard({ espacio, onPress }) {
+  const nombre = espacio?.name || espacio?.nombre || 'Biblioteca';
+
+  const puestosLibres =
+    espacio?.freeSeats ??
+    espacio?.availableSeats ??
+    espacio?.puestos_libres ??
+    espacio?.free_seats ??
+    null;
+
+  const ocupacion =
+    espacio?.occupancyPercent ??
+    espacio?.occupancy ??
+    espacio?.ocupacion ??
+    null;
+
+  const estado =
+    espacio?.status || espacio?.estado || espacio?.estado_actual || 'Disponible';
+
+  return (
+    <TouchableOpacity
+      style={styles.libraryCard}
+      onPress={onPress}
+      activeOpacity={0.86}
+    >
+      <View style={styles.cardTop}>
+        <View style={styles.libraryIcon}>
+          <Ionicons name="library-outline" size={22} color={colors.primary} />
+        </View>
+
+        <View style={styles.cardTextBox}>
+          <Text style={styles.normalTitle} numberOfLines={1}>
+            {nombre}
+          </Text>
+
+          <Text style={styles.normalSubtitle} numberOfLines={1}>
+            {estado}
+          </Text>
+        </View>
+
+        <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+      </View>
+
+      <View style={styles.libraryInfoRow}>
+        <View style={styles.libraryMetric}>
+          <Text style={styles.metricValue}>
+            {puestosLibres !== null ? puestosLibres : '—'}
+          </Text>
+          <Text style={styles.metricLabel}>puestos libres</Text>
+        </View>
+
+        <View style={styles.libraryMetric}>
+          <Text style={styles.metricValue}>
+            {ocupacion !== null ? `${ocupacion}%` : '—'}
+          </Text>
+          <Text style={styles.metricLabel}>ocupación</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function InfoItem({ icon, label, value }) {
+  return (
+    <View style={styles.infoItem}>
+      <Ionicons name={icon} size={16} color={colors.textSecondary} />
+
+      <View style={styles.infoTextBox}>
+        <Text style={styles.infoLabel}>{label}</Text>
+        <Text style={styles.infoValue} numberOfLines={1}>
+          {value}
+        </Text>
+      </View>
     </View>
   );
 }
 
-function capitalizar(texto) {
-  if (!texto) return '';
-  return texto.charAt(0).toUpperCase() + texto.slice(1);
+function EmptyCard({ icon, title, text }) {
+  return (
+    <View style={styles.emptyCard}>
+      <View style={styles.emptyIcon}>
+        <Ionicons name={icon} size={23} color={colors.textMuted} />
+      </View>
+
+      <View style={styles.emptyTextBox}>
+        <Text style={styles.emptyTitle}>{title}</Text>
+        <Text style={styles.emptyText}>{text}</Text>
+      </View>
+    </View>
+  );
+}
+
+function LoadingState() {
+  return (
+    <View style={styles.loadingCard}>
+      <ActivityIndicator size="large" color={colors.primary} />
+      <Text style={styles.loadingText}>Cargando tu información...</Text>
+    </View>
+  );
+}
+
+function ErrorState({ mensaje, onRetry }) {
+  return (
+    <View style={styles.errorCard}>
+      <Ionicons name="alert-circle-outline" size={34} color="#DC2626" />
+
+      <Text style={styles.errorTitle}>No se pudo cargar</Text>
+      <Text style={styles.errorText}>{mensaje}</Text>
+
+      <TouchableOpacity style={styles.retryBtn} onPress={onRetry}>
+        <Text style={styles.retryText}>Reintentar</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function formatearFechaCorta() {
+  const fecha = new Date();
+
+  return fecha
+    .toLocaleDateString('es-EC', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+    })
+    .replace('.', '');
+}
+
+function formatHorario(inicio, fin) {
+  if (!inicio || !fin) return 'Sin horario';
+
+  const opciones = {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  };
+
+  return `${formatearHora(inicio, opciones)} – ${formatearHora(fin, opciones)}`;
+}
+
+function formatearHora(valor, opciones) {
+  if (!valor) return '--:--';
+
+  if (String(valor).includes('T')) {
+    const fecha = new Date(valor);
+
+    if (!Number.isNaN(fecha.getTime())) {
+      return fecha.toLocaleTimeString([], opciones);
+    }
+  }
+
+  return String(valor).slice(0, 5);
 }
 
 const styles = StyleSheet.create({
@@ -389,361 +534,324 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl,
   },
 
-  todayCard: {
-    backgroundColor: colors.primary,
-    borderRadius: 26,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    overflow: 'hidden',
-  },
-
-  todayLabel: {
-    fontSize: 12,
-    color: '#DBEAFE',
-    fontWeight: typography.weight.bold,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-
-  todayDate: {
-    fontSize: 24,
-    color: colors.white,
-    fontWeight: typography.weight.bold,
-    marginTop: 4,
-  },
-
-  todayBadge: {
-    position: 'absolute',
-    top: spacing.lg,
-    right: spacing.lg,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 18,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-  },
-
-  todayBadgeNumber: {
-    fontSize: 18,
-    color: colors.white,
-    fontWeight: typography.weight.bold,
-  },
-
-  todayBadgeText: {
-    fontSize: 10,
-    color: '#DBEAFE',
-    fontWeight: typography.weight.semibold,
-  },
-
-  todayLine: {
-    width: 46,
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.45)',
-    borderRadius: 999,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-
-  todayMessage: {
-    fontSize: typography.size.sm,
-    color: '#EFF6FF',
-    lineHeight: 20,
-    maxWidth: '85%',
-  },
-
-  classHero: {
+  headerCard: {
     backgroundColor: colors.white,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-  },
-
-  classHeroEmpty: {
-    backgroundColor: colors.white,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.xl,
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-
-  emptyIconBox: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.sm,
-  },
-
-  emptyMainTitle: {
-    fontSize: typography.size.md,
-    color: colors.textPrimary,
-    fontWeight: typography.weight.bold,
-  },
-
-  emptyMainText: {
-    fontSize: typography.size.sm,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginTop: spacing.xs,
-  },
-
-  classHeroTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-
-  liveBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-  },
-
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-
-  liveDotActive: {
-    backgroundColor: '#16A34A',
-  },
-
-  liveDotNext: {
-    backgroundColor: colors.primary,
-  },
-
-  liveText: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    fontWeight: typography.weight.bold,
-  },
-
-  classTime: {
-    fontSize: typography.size.xs,
-    color: colors.textSecondary,
-    fontWeight: typography.weight.bold,
-  },
-
-  classTitle: {
-    fontSize: 24,
-    color: colors.textPrimary,
-    fontWeight: typography.weight.bold,
-    marginBottom: spacing.md,
-  },
-
-  locationPanel: {
-    backgroundColor: '#F8FAFC',
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
+    marginBottom: spacing.lg,
     flexDirection: 'row',
-    marginBottom: spacing.md,
+    alignItems: 'flex-start',
   },
 
-  locationIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+  headerTextBox: {
+    flex: 1,
+    paddingRight: spacing.sm,
+  },
+
+  headerKicker: {
+    fontSize: 10,
+    color: colors.primary,
+    fontWeight: typography.weight.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+
+  headerTitle: {
+    fontSize: typography.size.lg,
+    color: colors.textPrimary,
+    fontWeight: typography.weight.bold,
+  },
+
+  headerSubtitle: {
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+    marginTop: 4,
+    lineHeight: 19,
+  },
+
+  dateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 7,
+  },
+
+  dateChipText: {
+    marginLeft: 5,
+    fontSize: 11,
+    color: colors.primary,
+    fontWeight: typography.weight.bold,
+    textTransform: 'capitalize',
+  },
+
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+    marginTop: spacing.sm,
+  },
+
+  sectionIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.sm,
   },
 
-  locationTextBox: {
+  sectionTextBox: {
     flex: 1,
   },
 
-  locationBuilding: {
-    fontSize: typography.size.sm,
+  sectionTitle: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.bold,
     color: colors.textPrimary,
-    fontWeight: typography.weight.bold,
   },
 
-  locationRoom: {
-    fontSize: typography.size.xs,
-    color: colors.primary,
-    fontWeight: typography.weight.bold,
-    marginTop: 3,
-  },
-
-  locationReference: {
+  sectionSubtitle: {
     fontSize: typography.size.xs,
     color: colors.textSecondary,
-    marginTop: 3,
-    lineHeight: 17,
+    marginTop: 2,
   },
 
-  routeButton: {
-    minHeight: 48,
-    borderRadius: radius.md,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-
-  routeButtonText: {
-    color: colors.white,
-    fontSize: typography.size.sm,
-    fontWeight: typography.weight.bold,
-  },
-
-  studyCard: {
+  actualCard: {
     backgroundColor: colors.white,
-    borderRadius: 24,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+
+  normalCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
     marginBottom: spacing.md,
   },
 
-  sectionHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-  },
-
-  sectionTitle: {
-    fontSize: typography.size.md,
-    color: colors.textPrimary,
-    fontWeight: typography.weight.bold,
-  },
-
-  studyRecommendation: {
-    backgroundColor: '#F8FAFC',
+  libraryCard: {
+    backgroundColor: colors.white,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
+    marginBottom: spacing.md,
   },
 
-  studyTop: {
+  cardTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.sm,
   },
 
-  studyIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+  actualIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+
+  softIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+
+  libraryIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
     backgroundColor: '#F0FDF4',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.sm,
   },
 
-  studyNameBox: {
+  cardTextBox: {
     flex: 1,
+    paddingRight: spacing.sm,
   },
 
-  studyName: {
-    fontSize: typography.size.sm,
+  cardTitle: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.bold,
     color: colors.textPrimary,
+  },
+
+  cardSubtitle: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    marginTop: 3,
+    fontWeight: typography.weight.semibold,
+  },
+
+  normalTitle: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.bold,
+    color: colors.textPrimary,
+  },
+
+  normalSubtitle: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    marginTop: 3,
+    fontWeight: typography.weight.semibold,
+  },
+
+  activeBadge: {
+    backgroundColor: '#DCFCE7',
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+  },
+
+  activeBadgeText: {
+    fontSize: 10,
+    color: '#15803D',
     fontWeight: typography.weight.bold,
   },
 
-  studyReason: {
-    fontSize: typography.size.xs,
-    color: colors.textSecondary,
-    marginTop: 2,
+  cardInfoRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
   },
 
-  studyStats: {
-    flexDirection: 'row',
-    backgroundColor: colors.white,
+  infoItem: {
+    flex: 1,
+    minHeight: 45,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.sm,
-  },
-
-  miniStat: {
-    flex: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: spacing.sm,
+    flexDirection: 'row',
     alignItems: 'center',
   },
 
-  miniValue: {
-    fontSize: typography.size.md,
+  infoTextBox: {
+    flex: 1,
+    marginLeft: spacing.xs,
+  },
+
+  infoLabel: {
+    fontSize: 9,
+    color: colors.textSecondary,
+    fontWeight: typography.weight.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+
+  infoValue: {
+    fontSize: typography.size.xs,
+    color: colors.textPrimary,
+    fontWeight: typography.weight.semibold,
+    marginTop: 2,
+  },
+
+  actionBar: {
+    marginTop: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    minHeight: 40,
+    paddingHorizontal: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  actionText: {
+    fontSize: typography.size.sm,
+    color: colors.primary,
+    fontWeight: typography.weight.bold,
+    marginRight: 4,
+  },
+
+  libraryInfoRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+
+  libraryMetric: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: radius.md,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  metricValue: {
+    fontSize: typography.size.lg,
     color: colors.textPrimary,
     fontWeight: typography.weight.bold,
   },
 
-  miniLabel: {
+  metricLabel: {
     fontSize: 10,
     color: colors.textSecondary,
     fontWeight: typography.weight.semibold,
     marginTop: 2,
   },
 
-  noStudyBox: {
-    backgroundColor: '#F8FAFC',
+  emptyCard: {
+    backgroundColor: colors.white,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
+    marginBottom: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 
-  noStudyTitle: {
+  emptyIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
+  },
+
+  emptyTextBox: {
+    flex: 1,
+  },
+
+  emptyTitle: {
     fontSize: typography.size.sm,
     color: colors.textPrimary,
     fontWeight: typography.weight.bold,
   },
 
-  noStudyText: {
+  emptyText: {
     fontSize: typography.size.xs,
     color: colors.textSecondary,
-    marginTop: 4,
-    lineHeight: 18,
-  },
-
-  summaryRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-
-  summaryPill: {
-    flex: 1,
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-  },
-
-  summaryValue: {
-    fontSize: typography.size.md,
-    color: colors.textPrimary,
-    fontWeight: typography.weight.bold,
-    marginTop: 5,
-  },
-
-  summaryLabel: {
-    fontSize: 10,
-    color: colors.textSecondary,
-    fontWeight: typography.weight.semibold,
-    marginTop: 2,
-    textAlign: 'center',
+    marginTop: 3,
+    lineHeight: 17,
   },
 
   loadingCard: {
@@ -783,5 +891,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     marginTop: spacing.xs,
+  },
+
+  retryBtn: {
+    marginTop: spacing.md,
+    minHeight: 42,
+    borderRadius: radius.md,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  retryText: {
+    color: colors.white,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.bold,
   },
 });

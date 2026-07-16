@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -17,266 +17,41 @@ import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
 
-const FILTROS = [
-  { id: 'todos', label: 'Todos' },
-  { id: 'Biblioteca', label: 'Bibliotecas' },
-  { id: 'Sala de estudio', label: 'Salas' },
-  { id: 'Laboratorio', label: 'Computadoras' },
-];
-
 export default function EstudianteBibliotecasScreen() {
-  const { loading, spaces, summary, recommendation, reload } = useOccupancy();
-  const [filtro, setFiltro] = useState('todos');
+  const { loading, spaces, reload } = useOccupancy();
 
-  const espaciosFiltrados = useMemo(() => {
-    if (filtro === 'todos') return spaces;
+  const espacios = useMemo(() => {
+    return Array.isArray(spaces) ? spaces : [];
+  }, [spaces]);
 
-    return spaces.filter((item) => item.type === filtro);
-  }, [spaces, filtro]);
+  const resumen = useMemo(() => {
+    const totalEspacios = espacios.length;
 
-  const recomendacionNombre =
-    recommendation?.name ||
-    recommendation?.space?.name ||
-    recommendation?.spaceName ||
-    null;
+    const capacidadTotal = espacios.reduce(
+      (sum, item) => sum + obtenerCapacidad(item),
+      0
+    );
 
-  const obtenerEstadoVisual = (space) => {
-    const ocupacion = Number(space.occupancy || 0);
+    const personasDetectadas = espacios.reduce(
+      (sum, item) => sum + obtenerPersonas(item),
+      0
+    );
 
-    if (space.status === 'available' || ocupacion < 60) {
-      return {
-        label: 'Disponible',
-        color: '#16A34A',
-        bg: '#F0FDF4',
-        icon: 'checkmark-circle-outline',
-      };
-    }
+    const puestosLibres = Math.max(capacidadTotal - personasDetectadas, 0);
 
-    if (space.status === 'busy' || ocupacion >= 85) {
-      return {
-        label: 'Ocupado',
-        color: '#DC2626',
-        bg: '#FEF2F2',
-        icon: 'alert-circle-outline',
-      };
-    }
+    const ocupacionGeneral = calcularOcupacion(
+      personasDetectadas,
+      capacidadTotal
+    );
 
     return {
-      label: 'Moderado',
-      color: '#D97706',
-      bg: '#FEF3C7',
-      icon: 'time-outline',
+      totalEspacios,
+      capacidadTotal,
+      personasDetectadas,
+      puestosLibres,
+      ocupacionGeneral,
     };
-  };
-
-  const renderSkeleton = () => {
-    return (
-      <View>
-        <View style={styles.summarySkeleton}>
-          <View style={styles.skeletonLineLarge} />
-          <View style={styles.skeletonStatsRow}>
-            <View style={styles.skeletonStatBox} />
-            <View style={styles.skeletonStatBox} />
-            <View style={styles.skeletonStatBox} />
-          </View>
-        </View>
-
-        {[1, 2, 3].map((item) => (
-          <View key={item} style={styles.skeletonCard}>
-            <View style={styles.skeletonLineMedium} />
-            <View style={styles.skeletonLineSmall} />
-            <View style={styles.skeletonDescription} />
-          </View>
-        ))}
-      </View>
-    );
-  };
-
-  const renderResumen = () => {
-    return (
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryTop}>
-          <View style={styles.summaryIcon}>
-            <Ionicons name="library-outline" size={22} color={colors.primary} />
-          </View>
-
-          <View style={styles.summaryTextBox}>
-            <Text style={styles.summaryTitle}>Disponibilidad</Text>
-
-            <Text style={styles.summarySubtitle}>
-              Datos actualizados automáticamente por visión IA.
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={styles.refreshBtn}
-            onPress={() => reload()}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="refresh-outline" size={19} color={colors.primary} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.statsRow}>
-          <MiniStat label="Mesas libres" value={summary?.tables || 0} />
-          <MiniStat label="Computadoras" value={summary?.computers || 0} />
-          <MiniStat label="Salas libres" value={summary?.rooms || 0} />
-        </View>
-
-        {recomendacionNombre ? (
-          <View style={styles.recommendationBox}>
-            <Ionicons
-              name="sparkles-outline"
-              size={16}
-              color={colors.primary}
-            />
-
-            <Text style={styles.recommendationText} numberOfLines={2}>
-              Recomendado ahora: {recomendacionNombre}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-    );
-  };
-
-  const renderFiltros = () => {
-    return (
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filtersRow}
-      >
-        {FILTROS.map((item) => {
-          const active = filtro === item.id;
-
-          return (
-            <TouchableOpacity
-              key={item.id}
-              style={[styles.filterChip, active && styles.filterChipActive]}
-              onPress={() => setFiltro(item.id)}
-              activeOpacity={0.85}
-            >
-              <Text
-                style={[
-                  styles.filterText,
-                  active && styles.filterTextActive,
-                ]}
-              >
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-    );
-  };
-
-  const renderSpace = (space) => {
-    const estado = obtenerEstadoVisual(space);
-    const ocupacion = Number(space.occupancy || 0);
-
-    return (
-      <View key={space.id} style={styles.spaceCard}>
-        <View style={styles.spaceHeader}>
-          <View style={styles.spaceIcon}>
-            <Ionicons
-              name={
-                space.type === 'Biblioteca'
-                  ? 'library-outline'
-                  : space.type === 'Laboratorio'
-                    ? 'desktop-outline'
-                    : 'people-outline'
-              }
-              size={21}
-              color={colors.primary}
-            />
-          </View>
-
-          <View style={styles.spaceTitleBox}>
-            <Text style={styles.spaceName} numberOfLines={1}>
-              {space.name}
-            </Text>
-
-            <Text style={styles.spaceType}>
-              {space.type} · {space.distanceTime || 'Sin distancia'}
-            </Text>
-          </View>
-
-          <View style={[styles.statusBadge, { backgroundColor: estado.bg }]}>
-            <Ionicons name={estado.icon} size={12} color={estado.color} />
-            <Text style={[styles.statusText, { color: estado.color }]}>
-              {estado.label}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.occupancyBlock}>
-          <View style={styles.occupancyTop}>
-            <Text style={styles.occupancyLabel}>Ocupación</Text>
-            <Text style={styles.occupancyValue}>{ocupacion}%</Text>
-          </View>
-
-          <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.progressFill,
-                {
-                  width: `${Math.min(ocupacion, 100)}%`,
-                  backgroundColor: estado.color,
-                },
-              ]}
-            />
-          </View>
-        </View>
-
-        <View style={styles.resourceRow}>
-          <ResourceItem
-            icon="restaurant-outline"
-            label="Mesas"
-            value={space.availableTables ?? 0}
-          />
-
-          <ResourceItem
-            icon="desktop-outline"
-            label="Computadoras"
-            value={space.availableComputers ?? 0}
-          />
-
-          <ResourceItem
-            icon="navigate-outline"
-            label="Ruta"
-            value={space.lat && space.lng ? 'GPS' : 'N/D'}
-            textValue
-          />
-        </View>
-
-        <View style={styles.sourceRow}>
-          <Ionicons
-            name="eye-outline"
-            size={14}
-            color={colors.textSecondary}
-          />
-
-          <Text style={styles.sourceText}>
-            Fuente: {space.raw?.source === 'vision' ? 'Visión IA' : 'Sistema de ocupación'}
-          </Text>
-        </View>
-      </View>
-    );
-  };
-
-  const renderEmpty = () => {
-    return (
-      <View style={styles.emptyCard}>
-        <Ionicons name="file-tray-outline" size={36} color={colors.textMuted} />
-        <Text style={styles.emptyTitle}>Sin espacios disponibles</Text>
-        <Text style={styles.emptyText}>
-          No se encontraron bibliotecas o espacios de estudio para este filtro.
-        </Text>
-      </View>
-    );
-  };
+  }, [espacios]);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -290,11 +65,19 @@ export default function EstudianteBibliotecasScreen() {
         </View>
 
         <View style={styles.pageTextBox}>
-          <Text style={styles.pageTitle}>Bibliotecas</Text>
+          <Text style={styles.pageTitle}>Biblioteca</Text>
           <Text style={styles.pageSubtitle}>
-            Encuentra espacios libres para estudiar.
+            Ocupación estimada por personas detectadas.
           </Text>
         </View>
+
+        <TouchableOpacity
+          style={styles.refreshBtn}
+          onPress={() => reload?.()}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="refresh-outline" size={19} color={colors.primary} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -303,22 +86,29 @@ export default function EstudianteBibliotecasScreen() {
         showsVerticalScrollIndicator={false}
       >
         {loading ? (
-          renderSkeleton()
+          <LoadingState />
         ) : (
           <>
-            {renderResumen()}
-            {renderFiltros()}
+            <ResumenCard resumen={resumen} />
 
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Espacios disponibles</Text>
-              <Text style={styles.sectionCount}>
-                {espaciosFiltrados.length}
-              </Text>
+              <View>
+                <Text style={styles.sectionTitle}>Espacios monitoreados</Text>
+                <Text style={styles.sectionSubtitle}>
+                  Datos generados desde la cámara del sistema.
+                </Text>
+              </View>
+
+              <Text style={styles.sectionCount}>{espacios.length}</Text>
             </View>
 
-            {espaciosFiltrados.length > 0
-              ? espaciosFiltrados.map(renderSpace)
-              : renderEmpty()}
+            {espacios.length > 0 ? (
+              espacios.map((space) => (
+                <EspacioCard key={space.id || space.name} space={space} />
+              ))
+            ) : (
+              <EmptyState />
+            )}
           </>
         )}
       </ScrollView>
@@ -326,28 +116,284 @@ export default function EstudianteBibliotecasScreen() {
   );
 }
 
-function MiniStat({ label, value }) {
+function ResumenCard({ resumen }) {
+  const estado = obtenerEstadoOcupacion(
+    resumen.ocupacionGeneral,
+    resumen.capacidadTotal
+  );
+
+  return (
+    <View style={styles.summaryCard}>
+      <View style={styles.summaryTop}>
+        <View style={styles.summaryIcon}>
+          <Ionicons name="people-outline" size={24} color={colors.primary} />
+        </View>
+
+        <View style={styles.summaryTextBox}>
+          <Text style={styles.summaryTitle}>Ocupación general</Text>
+
+          <Text style={styles.summarySubtitle}>
+            {resumen.ocupacionGeneral}% de ocupación estimada.
+          </Text>
+        </View>
+
+        <View style={[styles.statusBadge, { backgroundColor: estado.bg }]}>
+          <Text style={[styles.statusText, { color: estado.color }]}>
+            {estado.label}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.progressTrack}>
+        <View
+          style={[
+            styles.progressFill,
+            {
+              width: `${resumen.ocupacionGeneral}%`,
+              backgroundColor: estado.color,
+            },
+          ]}
+        />
+      </View>
+
+      <View style={styles.statsRow}>
+        <MiniStat
+          icon="person-outline"
+          label="Personas"
+          value={resumen.personasDetectadas}
+        />
+
+        <MiniStat
+          icon="checkmark-circle-outline"
+          label="Libres"
+          value={resumen.puestosLibres}
+        />
+
+        <MiniStat
+          icon="grid-outline"
+          label="Capacidad"
+          value={resumen.capacidadTotal}
+        />
+      </View>
+    </View>
+  );
+}
+
+function EspacioCard({ space }) {
+  const nombre = space?.name || space?.nombre || 'Espacio sin nombre';
+
+  const capacidad = obtenerCapacidad(space);
+  const personas = obtenerPersonas(space);
+  const libres = Math.max(capacidad - personas, 0);
+  const ocupacion = calcularOcupacion(personas, capacidad);
+  const estado = obtenerEstadoOcupacion(ocupacion, capacidad);
+
+  return (
+    <View style={styles.spaceCard}>
+      <View style={styles.spaceHeader}>
+        <View style={styles.spaceIcon}>
+          <Ionicons name="library-outline" size={22} color={colors.primary} />
+        </View>
+
+        <View style={styles.spaceTitleBox}>
+          <Text style={styles.spaceName} numberOfLines={1}>
+            {nombre}
+          </Text>
+
+          <Text style={styles.spaceType} numberOfLines={1}>
+            Monitoreo por personas detectadas
+          </Text>
+        </View>
+
+        <View style={[styles.statusBadge, { backgroundColor: estado.bg }]}>
+          <Text style={[styles.statusText, { color: estado.color }]}>
+            {estado.label}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.occupancyBlock}>
+        <View style={styles.occupancyTop}>
+          <Text style={styles.occupancyLabel}>Ocupación</Text>
+          <Text style={styles.occupancyValue}>{ocupacion}%</Text>
+        </View>
+
+        <View style={styles.progressTrack}>
+          <View
+            style={[
+              styles.progressFill,
+              {
+                width: `${ocupacion}%`,
+                backgroundColor: estado.color,
+              },
+            ]}
+          />
+        </View>
+      </View>
+
+      <View style={styles.metricsRow}>
+        <MetricBox
+          icon="person-outline"
+          label="Personas"
+          value={personas}
+        />
+
+        <MetricBox
+          icon="checkmark-circle-outline"
+          label="Libres"
+          value={libres}
+        />
+
+        <MetricBox
+          icon="grid-outline"
+          label="Capacidad"
+          value={capacidad}
+        />
+      </View>
+
+      <View style={styles.sourceRow}>
+        <Ionicons name="eye-outline" size={14} color={colors.textSecondary} />
+
+        <Text style={styles.sourceText}>
+          Fuente: visión IA · conteo referencial
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function MiniStat({ icon, label, value }) {
   return (
     <View style={styles.statItem}>
+      <Ionicons name={icon} size={16} color={colors.textSecondary} />
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 }
 
-function ResourceItem({ icon, label, value, textValue = false }) {
+function MetricBox({ icon, label, value }) {
   return (
-    <View style={styles.resourceItem}>
-      <Ionicons name={icon} size={15} color={colors.textSecondary} />
-
-      <View style={styles.resourceTextBox}>
-        <Text style={styles.resourceValue}>
-          {textValue ? value : value}
-        </Text>
-        <Text style={styles.resourceLabel}>{label}</Text>
-      </View>
+    <View style={styles.metricBox}>
+      <Ionicons name={icon} size={16} color={colors.textSecondary} />
+      <Text style={styles.metricValue}>{value}</Text>
+      <Text style={styles.metricLabel}>{label}</Text>
     </View>
   );
+}
+
+function LoadingState() {
+  return (
+    <View>
+      <View style={styles.summarySkeleton}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Actualizando ocupación...</Text>
+      </View>
+
+      {[1, 2, 3].map((item) => (
+        <View key={item} style={styles.skeletonCard}>
+          <View style={styles.skeletonLineLarge} />
+          <View style={styles.skeletonLineSmall} />
+          <View style={styles.skeletonDescription} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function EmptyState() {
+  return (
+    <View style={styles.emptyCard}>
+      <Ionicons name="file-tray-outline" size={36} color={colors.textMuted} />
+
+      <Text style={styles.emptyTitle}>Sin datos de ocupación</Text>
+
+      <Text style={styles.emptyText}>
+        Aún no se recibe información desde el servicio de visión.
+      </Text>
+    </View>
+  );
+}
+
+function obtenerCapacidad(space) {
+  return (
+    Number(space?.capacity) ||
+    Number(space?.capacidad) ||
+    Number(space?.totalSeats) ||
+    Number(space?.total_seats) ||
+    Number(space?.seats) ||
+    0
+  );
+}
+
+function obtenerPersonas(space) {
+  const directo =
+    Number(space?.peopleCount) ||
+    Number(space?.personas) ||
+    Number(space?.personasDetectadas) ||
+    Number(space?.people) ||
+    Number(space?.occupiedSeats) ||
+    0;
+
+  if (directo > 0) {
+    return directo;
+  }
+
+  const capacidad = obtenerCapacidad(space);
+  const ocupacion =
+    Number(space?.occupancy) ||
+    Number(space?.occupancyPercent) ||
+    Number(space?.ocupacion) ||
+    0;
+
+  if (capacidad > 0 && ocupacion > 0) {
+    return Math.round((ocupacion / 100) * capacidad);
+  }
+
+  return 0;
+}
+
+function calcularOcupacion(personas, capacidad) {
+  if (!capacidad || capacidad <= 0) return 0;
+
+  const porcentaje = Math.round((personas / capacidad) * 100);
+
+  if (porcentaje < 0) return 0;
+  if (porcentaje > 100) return 100;
+
+  return porcentaje;
+}
+
+function obtenerEstadoOcupacion(ocupacion, capacidad) {
+  if (!capacidad || capacidad <= 0) {
+    return {
+      label: 'Sin datos',
+      color: '#64748B',
+      bg: '#F1F5F9',
+    };
+  }
+
+  if (ocupacion >= 85) {
+    return {
+      label: 'Lleno',
+      color: '#DC2626',
+      bg: '#FEE2E2',
+    };
+  }
+
+  if (ocupacion >= 55) {
+    return {
+      label: 'Moderado',
+      color: '#D97706',
+      bg: '#FEF3C7',
+    };
+  }
+
+  return {
+    label: 'Disponible',
+    color: '#16A34A',
+    bg: '#DCFCE7',
+  };
 }
 
 const styles = StyleSheet.create({
@@ -392,6 +438,15 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
 
+  refreshBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   scroll: {
     flex: 1,
     backgroundColor: colors.background,
@@ -408,7 +463,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
   },
 
   summaryTop: {
@@ -418,9 +473,9 @@ const styles = StyleSheet.create({
   },
 
   summaryIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 44,
+    height: 44,
+    borderRadius: 16,
     backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -429,6 +484,7 @@ const styles = StyleSheet.create({
 
   summaryTextBox: {
     flex: 1,
+    paddingRight: spacing.sm,
   },
 
   summaryTitle: {
@@ -442,15 +498,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 2,
     lineHeight: 17,
-  },
-
-  refreshBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 
   statsRow: {
@@ -471,6 +518,7 @@ const styles = StyleSheet.create({
     fontSize: typography.size.lg,
     color: colors.textPrimary,
     fontWeight: typography.weight.bold,
+    marginTop: 2,
   },
 
   statLabel: {
@@ -480,56 +528,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  recommendationBox: {
-    marginTop: spacing.sm,
-    backgroundColor: '#EFF6FF',
-    borderRadius: radius.md,
-    padding: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  recommendationText: {
-    flex: 1,
-    marginLeft: spacing.xs,
-    fontSize: typography.size.xs,
-    color: colors.primary,
-    fontWeight: typography.weight.bold,
-    lineHeight: 17,
-  },
-
-  filtersRow: {
-    paddingBottom: spacing.md,
-  },
-
-  filterChip: {
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 9,
-    marginRight: spacing.sm,
-  },
-
-  filterChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-
-  filterText: {
-    fontSize: typography.size.xs,
-    color: colors.textSecondary,
-    fontWeight: typography.weight.bold,
-  },
-
-  filterTextActive: {
-    color: colors.white,
-  },
-
   sectionHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     marginBottom: spacing.sm,
   },
@@ -538,6 +539,12 @@ const styles = StyleSheet.create({
     fontSize: typography.size.md,
     color: colors.textPrimary,
     fontWeight: typography.weight.bold,
+  },
+
+  sectionSubtitle: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
 
   sectionCount: {
@@ -564,7 +571,7 @@ const styles = StyleSheet.create({
   spaceIcon: {
     width: 42,
     height: 42,
-    borderRadius: 21,
+    borderRadius: 16,
     backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -591,10 +598,7 @@ const styles = StyleSheet.create({
   statusBadge: {
     borderRadius: radius.full,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    paddingVertical: 6,
   },
 
   statusText: {
@@ -631,6 +635,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#E5E7EB',
     overflow: 'hidden',
+    marginBottom: spacing.md,
   },
 
   progressFill: {
@@ -638,37 +643,35 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
 
-  resourceRow: {
+  metricsRow: {
     flexDirection: 'row',
     gap: spacing.sm,
   },
 
-  resourceItem: {
+  metricBox: {
     flex: 1,
-    minHeight: 44,
+    minHeight: 58,
     backgroundColor: '#F8FAFC',
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: spacing.sm,
-    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
   },
 
-  resourceTextBox: {
-    marginLeft: 6,
-  },
-
-  resourceValue: {
-    fontSize: typography.size.sm,
+  metricValue: {
+    fontSize: typography.size.md,
     color: colors.textPrimary,
     fontWeight: typography.weight.bold,
+    marginTop: 2,
   },
 
-  resourceLabel: {
-    fontSize: 9,
+  metricLabel: {
+    fontSize: 10,
     color: colors.textSecondary,
     fontWeight: typography.weight.semibold,
+    marginTop: 1,
   },
 
   sourceRow: {
@@ -709,25 +712,21 @@ const styles = StyleSheet.create({
   },
 
   summarySkeleton: {
+    minHeight: 160,
     backgroundColor: colors.white,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.md,
+    padding: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: spacing.md,
   },
 
-  skeletonStatsRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-
-  skeletonStatBox: {
-    flex: 1,
-    height: 54,
-    backgroundColor: '#E5E7EB',
-    borderRadius: radius.md,
+  loadingText: {
+    marginTop: spacing.sm,
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
   },
 
   skeletonCard: {
@@ -746,19 +745,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#E5E7EB',
   },
 
-  skeletonLineMedium: {
-    width: '50%',
-    height: 16,
-    borderRadius: radius.full,
-    backgroundColor: '#E5E7EB',
-    marginBottom: 8,
-  },
-
   skeletonLineSmall: {
     width: '35%',
     height: 12,
     borderRadius: radius.full,
     backgroundColor: '#E5E7EB',
+    marginTop: 8,
     marginBottom: spacing.md,
   },
 
