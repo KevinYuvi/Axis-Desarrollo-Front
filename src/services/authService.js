@@ -8,7 +8,6 @@ export const iniciarSesionAPI = async (email, password) => {
     formData.append('username', email);
     formData.append('password', password);
 
-    // 🔑 CORRECCIÓN DE LA RUTA AQUÍ: Agregamos /api/v1
     const response = await fetch(`${API_URL}/api/v1/usuarios/login`, {
       method: 'POST',
       headers: {

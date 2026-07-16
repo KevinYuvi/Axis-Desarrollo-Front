@@ -68,7 +68,6 @@ export default function AppHeader({
           resizeMode="contain"
         />
 
-        <Text style={styles.brandText}>AXIS</Text>
 
         <View style={[styles.chip, { backgroundColor: config.bg }]}>
           <Text style={[styles.chipText, { color: config.text }]}>
