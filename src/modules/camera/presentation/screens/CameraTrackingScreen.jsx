@@ -69,18 +69,37 @@ export default function CameraTrackingScreen({ spaceId, onNavigate, rol = 'estud
   const frameFailed = failedFrameUrl === annotatedFrameUrl;
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={styles.screen} edges={['top']}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.content}>
-        <AppHeader rol={rol} />
 
-        <TouchableOpacity style={styles.backButton} onPress={() => onNavigate('libraries')}>
-          <Feather name="arrow-left" size={16} color={colors.textSecondary} style={{ marginRight: 6 }} />
-          <Text style={styles.backButtonText}>Volver</Text>
+      {/* Header principal a ancho completo, igual que el resto de pantallas
+          de la app (fuera del scroll para que no quede "encajonado"). */}
+      <AppHeader rol={rol} />
+
+      {/* Barra de título con botón de volver, mismo patrón visual que las
+          demás secciones (Bibliotecas, Ruta, etc.). */}
+      <View style={styles.pageHeader}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => onNavigate('libraries')}
+          activeOpacity={0.85}
+        >
+          <Feather name="chevron-left" size={20} color={colors.textPrimary} />
         </TouchableOpacity>
 
-        <Text style={styles.title}>{space ? space.name : 'Cámara en vivo'}</Text>
+        <View style={styles.pageTextBox}>
+          <Text style={styles.pageTitle}>Cámara en vivo</Text>
+          <Text style={styles.pageSubtitle}>
+            {space ? space.name : 'Cargando espacio...'}
+          </Text>
+        </View>
+      </View>
 
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         {isLive ? (
           <Card style={styles.cameraCard}>
             <View style={styles.liveBadge}>
@@ -177,26 +196,47 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.white,
   },
-  content: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xl,
-  },
-  backButton: {
+  // Barra de título bajo el AppHeader — mismo formato que el resto de
+  // secciones de la app (botón circular de volver + título y subtítulo).
+  pageHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    marginBottom: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
-  backButtonText: {
-    fontSize: typography.size.sm,
-    color: colors.textSecondary,
-    fontWeight: typography.weight.medium,
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm,
   },
-  title: {
-    fontSize: typography.size.xl,
+  pageTextBox: {
+    flex: 1,
+  },
+  pageTitle: {
+    fontSize: typography.size.md,
     fontWeight: typography.weight.bold,
     color: colors.textPrimary,
-    marginBottom: spacing.md,
+  },
+  pageSubtitle: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  // El scroll ocupa el resto de la pantalla con el fondo gris estándar.
+  scroll: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  content: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xxl,
   },
   cameraCard: {
     marginBottom: spacing.md,
