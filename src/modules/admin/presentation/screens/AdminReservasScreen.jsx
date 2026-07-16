@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -17,7 +18,10 @@ import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
 import { AppHeader } from '../../../../shared/components';
 import { crearConexionRealtime } from '../../../../shared/realtime/realtimeClient';
-import { obtenerReservasAdmin } from '../../services/adminApi';
+import {
+  liberarReservaAdmin,
+  obtenerReservasAdmin,
+} from '../../services/adminApi';
 
 import ReservaCard from '../components/reservas/ReservaCard';
 import ReservaSummaryCompact from '../components/reservas/ReservaSummaryCompact';
@@ -39,6 +43,7 @@ export default function AdminReservasScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filtroActivo, setFiltroActivo] = useState('todas');
+  const [liberandoId, setLiberandoId] = useState(null);
 
   const obtenerTokenActual = async () => {
     const token = await getToken({
@@ -63,7 +68,7 @@ export default function AdminReservasScreen() {
 
       const token = await obtenerTokenActual();
       const data = await obtenerReservasAdmin(token);
-
+      console.log('RESERVAS ADMIN:', JSON.stringify(data, null, 2));
       setReservas(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error cargando reservas admin:', err);
@@ -73,13 +78,61 @@ export default function AdminReservasScreen() {
     }
   };
 
+  const liberarReserva = async (reserva) => {
+    const reservaId = reserva?.id;
+
+    if (!reservaId) {
+      Alert.alert('Reserva no válida', 'No se pudo identificar la reserva.');
+      return;
+    }
+
+    Alert.alert(
+      'Liberar aula',
+      '¿Seguro que deseas liberar esta aula? La reserva quedará marcada como liberada.',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+        {
+          text: 'Liberar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLiberandoId(reservaId);
+
+              const token = await obtenerTokenActual();
+
+              await liberarReservaAdmin(token, reservaId);
+
+              await cargarReservas({ silencioso: true });
+            } catch (err) {
+              console.error('Error liberando reserva admin:', err);
+
+              Alert.alert(
+                'No se pudo liberar',
+                err.message || 'Ocurrió un error al liberar la reserva.'
+              );
+            } finally {
+              setLiberandoId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   useFocusEffect(
     useCallback(() => {
       cargarReservas({ silencioso: true });
 
       const realtime = crearConexionRealtime({
         onEvento: (evento) => {
-          if (evento.tipo === 'reservas_actualizadas') {
+          if (
+            evento.tipo === 'reservas_actualizadas' ||
+            evento.tipo === 'aulas_actualizadas' ||
+            evento.tipo === 'dashboard_actualizado'
+          ) {
             cargarReservas({ silencioso: true });
           }
         },
@@ -90,6 +143,7 @@ export default function AdminReservasScreen() {
       };
     }, [])
   );
+
   const reservasActivas = reservas.filter(
     (item) => obtenerEstadoReserva(item) === 'activa'
   ).length;
@@ -102,17 +156,6 @@ export default function AdminReservasScreen() {
     const estado = obtenerEstadoReserva(item);
     return estado === 'activa' || estado === 'futura';
   });
-
-  const reservasNoMostradas = reservas.filter((item) => {
-    const estado = obtenerEstadoReserva(item);
-
-    return (
-      estado === 'finalizada' ||
-      estado === 'liberada' ||
-      estado === 'cancelada' ||
-      estado === 'sin_horario'
-    );
-  }).length;
 
   const reservasFiltradas = reservas.filter((item) => {
     const estado = obtenerEstadoReserva(item);
@@ -224,13 +267,20 @@ export default function AdminReservasScreen() {
             </View>
 
             {reservasFiltradas.length > 0 ? (
-              reservasFiltradas.map((item, index) => (
-                <ReservaCard
-                  key={item?.reserva?.id || item?.id || index}
-                  item={item}
-                  estado={obtenerEstadoReserva(item)}
-                />
-              ))
+              reservasFiltradas.map((item, index) => {
+                const reserva = item?.reserva || item;
+                const reservaId = reserva?.id || String(index);
+
+                return (
+                  <ReservaCard
+                    key={reservaId}
+                    item={item}
+                    estado={obtenerEstadoReserva(item)}
+                    onLiberar={liberarReserva}
+                    liberando={liberandoId === reservaId}
+                  />
+                );
+              })
             ) : (
               <View style={styles.emptyCard}>
                 <Ionicons
@@ -267,6 +317,12 @@ function obtenerEstadoReserva(item) {
     return 'cancelada';
   }
 
+  // Primero usar el estado calculado por el backend
+  if (reserva?.estado_tiempo) {
+    return reserva.estado_tiempo;
+  }
+
+  // Respaldo por si alguna reserva vieja no trae estado_tiempo
   const inicio = convertirFecha(reserva?.hora_inicio);
   const fin = convertirFecha(reserva?.hora_fin);
 
@@ -276,14 +332,6 @@ function obtenerEstadoReserva(item) {
 
   const ahora = new Date();
 
-  if (fin <= inicio) {
-    return 'liberada';
-  }
-
-  if (fin < ahora) {
-    return 'finalizada';
-  }
-
   if (ahora >= inicio && ahora <= fin) {
     return 'activa';
   }
@@ -292,7 +340,7 @@ function obtenerEstadoReserva(item) {
     return 'futura';
   }
 
-  return 'sin_horario';
+  return 'finalizada';
 }
 
 function convertirFecha(fechaTexto) {
@@ -302,6 +350,8 @@ function convertirFecha(fechaTexto) {
 
   return Number.isNaN(fecha.getTime()) ? null : fecha;
 }
+
+
 
 const styles = StyleSheet.create({
   screen: {
@@ -350,26 +400,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  noticeCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: spacing.md,
-  },
-
-  noticeText: {
-    flex: 1,
-    fontSize: typography.size.xs,
-    color: colors.textSecondary,
-    lineHeight: 17,
-    fontWeight: typography.weight.semibold,
-    marginLeft: spacing.xs,
   },
 
   filterWrap: {

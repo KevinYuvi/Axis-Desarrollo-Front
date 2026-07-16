@@ -309,29 +309,22 @@ export default function AdminReportesScreen() {
               </Text>
             </View>
 
-            {reportesFiltrados.length > 0 ? (
-              reportesFiltrados.map((item) => (
-                <ReporteCard
-                  key={item.id}
-                  reporte={item}
-                  onPressEstado={() => abrirOpcionesEstado(item)}
-                />
-              ))
-            ) : (
-              <View style={styles.emptyCard}>
-                <Ionicons
-                  name="file-tray-outline"
-                  size={34}
-                  color={colors.textMuted}
-                />
-
-                <Text style={styles.emptyTitle}>Sin reportes</Text>
-
-                <Text style={styles.emptyText}>
-                  No hay incidencias registradas para estos filtros.
-                </Text>
-              </View>
-            )}
+            {reportesFiltrados.map((item) => (
+              <ReporteCard
+                key={item.id}
+                reporte={item}
+                onPressEstado={() => abrirOpcionesEstado(item)}
+                onPressDetalle={() =>
+                  router.push({
+                    pathname: '/(admin)/reporte/[reporteId]',
+                    params: {
+                      reporteId: item.id,
+                      data: encodeURIComponent(JSON.stringify(item)),
+                    },
+                  })
+                }
+              />
+            ))}
           </>
         )}
       </ScrollView>
