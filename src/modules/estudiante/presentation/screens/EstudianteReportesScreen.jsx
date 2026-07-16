@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { crearConexionRealtime } from '../../../../shared/realtime/realtimeClient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -64,7 +65,19 @@ export default function EstudianteReportesScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      cargarReportes();
+      cargarReportes({ silencioso: true });
+
+      const realtime = crearConexionRealtime({
+        onEvento: (evento) => {
+          if (evento.tipo === 'reportes_actualizados') {
+            cargarReportes({ silencioso: true });
+          }
+        },
+      });
+
+      return () => {
+        realtime?.cerrar();
+      };
     }, [])
   );
 

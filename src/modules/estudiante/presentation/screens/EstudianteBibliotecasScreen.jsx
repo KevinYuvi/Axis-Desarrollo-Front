@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -8,17 +8,40 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import AppHeader from '../../../../shared/components/organisms/AppHeader';
 import { useOccupancy } from '../../../../shared/hooks/useOccupancy';
+import { crearConexionRealtime } from '../../../../shared/realtime/realtimeClient';
 import { colors } from '../../../../shared/theme/colors';
 import { typography } from '../../../../shared/theme/typography';
 import { spacing, radius } from '../../../../shared/theme/spacing';
 
 export default function EstudianteBibliotecasScreen() {
   const { loading, spaces, reload } = useOccupancy();
+
+  useFocusEffect(
+    useCallback(() => {
+      reload?.();
+
+      const realtime = crearConexionRealtime({
+        onEvento: (evento) => {
+          if (
+            evento.tipo === 'ocupacion_actualizada' ||
+            evento.tipo === 'aulas_actualizadas'
+          ) {
+            reload?.();
+          }
+        },
+      });
+
+      return () => {
+        realtime?.cerrar();
+      };
+    }, [reload])
+  );
 
   const espacios = useMemo(() => {
     return Array.isArray(spaces) ? spaces : [];
@@ -232,23 +255,9 @@ function EspacioCard({ space }) {
       </View>
 
       <View style={styles.metricsRow}>
-        <MetricBox
-          icon="person-outline"
-          label="Personas"
-          value={personas}
-        />
-
-        <MetricBox
-          icon="checkmark-circle-outline"
-          label="Libres"
-          value={libres}
-        />
-
-        <MetricBox
-          icon="grid-outline"
-          label="Capacidad"
-          value={capacidad}
-        />
+        <MetricBox icon="person-outline" label="Personas" value={personas} />
+        <MetricBox icon="checkmark-circle-outline" label="Libres" value={libres} />
+        <MetricBox icon="grid-outline" label="Capacidad" value={capacidad} />
       </View>
 
       <View style={styles.sourceRow}>
